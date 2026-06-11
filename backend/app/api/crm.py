@@ -266,6 +266,51 @@ def get_reengagement_candidates(days_limit: int = 3):
             
     return reengagement_list
 
+class BlockedDomainRequest(BaseModel):
+    domain: str
+
+@router.post("/blocked-domains")
+def add_blocked_domain(payload: BlockedDomainRequest):
+    """
+    Adds a new domain to the blocked domains exclusions list.
+    """
+    domain = payload.domain.strip().lower()
+    if not domain:
+        raise HTTPException(status_code=400, detail="Domain name cannot be empty.")
+        
+    # Check if already exists
+    existing = db.blocked_domains.find_one({"domain": domain})
+    if existing:
+        raise HTTPException(status_code=400, detail="Domain is already in the blocked list.")
+        
+    doc = {
+        "domain": domain,
+        "created_at": datetime.utcnow()
+    }
+    db.blocked_domains.insert_one(doc)
+    
+    return {
+        "message": f"Domain '{domain}' successfully added to blocked list.",
+        "domain": domain
+    }
+
+@router.delete("/blocked-domains/{domain}")
+def remove_blocked_domain(domain: str):
+    """
+    Removes a domain from the blocked domains exclusions list.
+    """
+    domain_clean = domain.strip().lower()
+    
+    result = db.blocked_domains.delete_one({"domain": domain_clean})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Domain not found in the blocked list.")
+        
+    return {
+        "message": f"Domain '{domain_clean}' successfully removed from blocked list.",
+        "domain": domain_clean
+    }
+
+
 
 
 
