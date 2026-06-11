@@ -1,5 +1,6 @@
 import "./globals.css";
 import Navbar from "@/components/Navbar";
+import ProfileGuardian from "@/components/ProfileGuardian";
 
 export const metadata = {
   title: "OutreachAI - Premium Cold Outreach Platform",
@@ -26,7 +27,9 @@ export default function RootLayout({ children }) {
               </div>
             </header>
             <main className="content-area">
-              {children}
+              <ProfileGuardian>
+                {children}
+              </ProfileGuardian>
             </main>
           </div>
         </div>
