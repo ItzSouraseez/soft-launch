@@ -330,6 +330,8 @@ class RecipientStatusPatchRequest(BaseModel):
     reply_sentiment: Optional[str] = None
     ooo_return_date: Optional[str] = None
     error_message: Optional[str] = None
+    mail_subject: Optional[str] = None
+    mail_body: Optional[str] = None
 
 @router.patch("/recipient/{id}")
 def update_recipient_status_manually(id: str, payload: RecipientStatusPatchRequest):
@@ -371,6 +373,12 @@ def update_recipient_status_manually(id: str, payload: RecipientStatusPatchReque
             
     if payload.error_message is not None:
         update_data["error_message"] = payload.error_message.strip() if payload.error_message else None
+        
+    if payload.mail_subject is not None:
+        update_data["mail_subject"] = payload.mail_subject.strip()
+        
+    if payload.mail_body is not None:
+        update_data["mail_body"] = payload.mail_body.strip()
         
     if not update_data:
         return {"message": "No fields to update.", "recipient_id": id}
