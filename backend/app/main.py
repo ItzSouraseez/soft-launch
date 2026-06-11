@@ -34,10 +34,12 @@ app.add_middleware(
 from app.api.settings import router as settings_router
 from app.api.profile import router as profile_router
 from app.api.resume import router as resume_router
+from app.api.campaigns import router as campaigns_router
 
 app.include_router(settings_router)
 app.include_router(profile_router)
 app.include_router(resume_router)
+app.include_router(campaigns_router)
 
 @app.get("/")
 def read_root():
