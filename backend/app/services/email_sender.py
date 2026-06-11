@@ -62,14 +62,46 @@ from email.mime.base import MIMEBase
 from email import encoders
 import os
 
-def compile_email(from_email: str, to_email: str, subject: str, body: str, resume_path: str = None) -> MIMEMultipart:
+from email.utils import make_msgid
+
+def compile_email(
+    from_email: str,
+    to_email: str,
+    subject: str,
+    body: str,
+    resume_path: str = None,
+    in_reply_to: str = None,
+    references: str = None
+) -> tuple[MIMEMultipart, str]:
     """
-    Compiles a MIME email message. Optionally attaches a PDF resume if resume_path is provided.
+    Compiles a MIME email message. Optionally attaches a PDF resume.
+    Also injects threading headers (In-Reply-To, References) and generates a Message-ID.
+    Returns a tuple: (msg_object, message_id_str).
     """
     msg = MIMEMultipart()
     msg["From"] = from_email
     msg["To"] = to_email
-    msg["Subject"] = subject
+    
+    # Generate unique Message-ID
+    msg_id = make_msgid()
+    msg["Message-ID"] = msg_id
+    
+    # Handle threading headers
+    if in_reply_to:
+        msg["In-Reply-To"] = in_reply_to
+        if references:
+            # Append new parent reference to the chain
+            msg["References"] = f"{references} {in_reply_to}".strip()
+        else:
+            msg["References"] = in_reply_to
+            
+        # Standard follow-up email threading subject prefix
+        if not subject.lower().startswith("re:"):
+            msg["Subject"] = f"Re: {subject}"
+        else:
+            msg["Subject"] = subject
+    else:
+        msg["Subject"] = subject
     
     # Attach body
     msg.attach(MIMEText(body, "plain"))
@@ -84,13 +116,14 @@ def compile_email(from_email: str, to_email: str, subject: str, body: str, resum
             encoders.encode_base64(part)
             part.add_header(
                 "Content-Disposition",
-                f"attachment; filename= {filename}",
+                f"attachment; filename={filename}",
             )
             msg.attach(part)
         except Exception as e:
             # Fallback/log, do not crash the compile process
             pass
             
-    return msg
+    return msg, msg_id
+
 
 
