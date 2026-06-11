@@ -219,10 +219,16 @@ def run_bulk_send(campaign_id_str: str, smtp_config: dict, resume_path: str = No
         )
         return
 
-    # Fetch delays
+    # Fetch delays with robust validation
     settings = get_settings()
-    delay_min = int(settings.get("send_delay_min", 30))
-    delay_max = int(settings.get("send_delay_max", 60))
+    try:
+        delay_min = max(0, int(settings.get("send_delay_min", 30)))
+        delay_max = max(0, int(settings.get("send_delay_max", 60)))
+        if delay_min > delay_max:
+            delay_min, delay_max = delay_max, delay_min
+    except (TypeError, ValueError):
+        delay_min, delay_max = 30, 60
+
 
     try:
         for idx, rec in enumerate(recipients):
