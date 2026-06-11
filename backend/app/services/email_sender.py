@@ -552,7 +552,15 @@ def run_followup_send(campaign_id_str: str, smtp_config: dict, resume_path: str 
                         job["errors"].append(error_msg)
                     continue
 
-            # Build and compile message (threading is disabled for Step 88)
+            # Fetch corresponding recipient to get parent thread headers (Step 89)
+            recipient = db.recipients.find_one({"_id": rec_id})
+            in_reply_to = None
+            references = None
+            if recipient:
+                in_reply_to = recipient.get("message_id")
+                references = recipient.get("message_id")
+
+            # Build and compile message
             try:
                 msg, msg_id = compile_email(
                     from_email=smtp_config["email"],
@@ -560,8 +568,8 @@ def run_followup_send(campaign_id_str: str, smtp_config: dict, resume_path: str 
                     subject=subject,
                     body=body,
                     resume_path=resume_path,
-                    in_reply_to=None,
-                    references=None
+                    in_reply_to=in_reply_to,
+                    references=references
                 )
                 
                 # Send the email
@@ -576,6 +584,17 @@ def run_followup_send(campaign_id_str: str, smtp_config: dict, resume_path: str 
                             "sent_at": datetime.utcnow(),
                             "message_id": msg_id,
                             "error_message": None
+                        }
+                    }
+                )
+                
+                # Also update recipient with followup metadata
+                db.recipients.update_one(
+                    {"_id": rec_id},
+                    {
+                        "$set": {
+                            "last_followup_sent_at": datetime.utcnow(),
+                            "last_followup_message_id": msg_id
                         }
                     }
                 )
