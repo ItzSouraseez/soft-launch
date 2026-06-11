@@ -142,10 +142,30 @@ def get_contact_history(email: str):
             "events": events
         })
         
+    # Program domain-level aggregation to find other leads on the identical domain
+    domain = email_clean.split("@")[-1].strip()
+    other_leads_cursor = db.recipients.find({
+        "email": {"$regex": f"@{domain}$", "$options": "i"},
+        "email": {"$ne": email_clean}
+    })
+    
+    other_leads_map = {}
+    for ol in other_leads_cursor:
+        ol_email = ol["email"]
+        if ol_email not in other_leads_map:
+            other_leads_map[ol_email] = {
+                "email": ol_email,
+                "name": ol.get("name", ""),
+                "status": ol.get("status", "draft"),
+                "campaign_id": str(ol.get("campaign_id", ""))
+            }
+            
     return {
         "email": email_clean,
         "name": recipients[0].get("name", ""),
-        "history": history
+        "history": history,
+        "other_domain_leads": list(other_leads_map.values())
     }
+
 
 
