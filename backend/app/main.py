@@ -1,10 +1,20 @@
+from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from app.core.db import init_db
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Initialize database indexes on startup
+    init_db()
+    yield
+    # Any cleanup operations would go here
 
 app = FastAPI(
     title="Cold Outreach Tool API",
     description="Backend API for Cold Email Outreach Tool with AI-generated drafts, IMAP monitoring, and CRM features",
-    version="1.0.0"
+    version="1.0.0",
+    lifespan=lifespan
 )
 
 # Configure CORS headers to allow connection from the Next.js frontend
@@ -20,6 +30,24 @@ app.add_middleware(
 def read_root():
     return {
         "status": "healthy",
+        "service": "Cold Outreach API",
+        "version": "1.0.0"
+    }
+
+@app.get("/api/health")
+def health_check():
+    db_status = "unhealthy"
+    try:
+        from app.core.db import get_db
+        db = get_db()
+        db.command("ping")
+        db_status = "healthy"
+    except Exception as e:
+        db_status = f"unhealthy: {str(e)}"
+    
+    return {
+        "status": "healthy" if db_status == "healthy" else "unhealthy",
+        "database": db_status,
         "service": "Cold Outreach API",
         "version": "1.0.0"
     }
