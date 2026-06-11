@@ -214,3 +214,32 @@ def get_campaign(id: str):
         "campaign": campaign,
         "recipients": recipients
     }
+
+@router.delete("/campaign/{id}")
+def delete_campaign(id: str):
+    """
+    Deletes a specific campaign and all associated recipient draft records.
+    """
+    try:
+        campaign_oid = ObjectId(id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid campaign ID format.")
+        
+    campaign = db.campaigns.find_one({"_id": campaign_oid})
+    if not campaign:
+        raise HTTPException(status_code=404, detail="Campaign not found.")
+        
+    # Delete campaign
+    db.campaigns.delete_one({"_id": campaign_oid})
+    
+    # Delete recipients associated with the campaign
+    rec_result = db.recipients.delete_many({"campaign_id": campaign_oid})
+    
+    # Delete followups (if any exist)
+    db.followups.delete_many({"campaign_id": campaign_oid})
+    
+    return {
+        "message": "Campaign and associated records deleted successfully.",
+        "campaign_id": id,
+        "total_recipients_deleted": rec_result.deleted_count
+    }
