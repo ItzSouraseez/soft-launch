@@ -310,6 +310,22 @@ def remove_blocked_domain(domain: str):
         "domain": domain_clean
     }
 
+@router.get("/blocked-domains")
+def get_blocked_domains():
+    """
+    Lists all blocked domains in the database.
+    """
+    domains = list(db.blocked_domains.find().sort("domain", 1))
+    formatted = []
+    for d in domains:
+        formatted.append({
+            "id": str(d["_id"]),
+            "domain": d["domain"],
+            "created_at": d.get("created_at").isoformat() if d.get("created_at") else None
+        })
+    return formatted
+
+
 
 
 
