@@ -59,7 +59,7 @@ export default function CampaignSendPage({ params }) {
     loadInitialData();
   }, [campaignId]);
 
-  // 2. Poll loop querying metrics every 5 seconds (Step 132)
+  // 2. Poll loop querying metrics every 5 seconds (Step 132 implemented)
   useEffect(() => {
     if (loading || errorDetails) return;
 
