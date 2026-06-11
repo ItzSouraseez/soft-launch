@@ -56,3 +56,41 @@ def validate_smtp_credentials(config: dict) -> tuple[bool, str]:
     except Exception as e:
         return False, f"Failed to connect to SMTP server: {str(e)}"
 
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
+from email.mime.base import MIMEBase
+from email import encoders
+import os
+
+def compile_email(from_email: str, to_email: str, subject: str, body: str, resume_path: str = None) -> MIMEMultipart:
+    """
+    Compiles a MIME email message. Optionally attaches a PDF resume if resume_path is provided.
+    """
+    msg = MIMEMultipart()
+    msg["From"] = from_email
+    msg["To"] = to_email
+    msg["Subject"] = subject
+    
+    # Attach body
+    msg.attach(MIMEText(body, "plain"))
+    
+    # Attach PDF resume if path is valid
+    if resume_path and os.path.exists(resume_path):
+        filename = os.path.basename(resume_path)
+        try:
+            with open(resume_path, "rb") as attachment:
+                part = MIMEBase("application", "octet-stream")
+                part.set_payload(attachment.read())
+            encoders.encode_base64(part)
+            part.add_header(
+                "Content-Disposition",
+                f"attachment; filename= {filename}",
+            )
+            msg.attach(part)
+        except Exception as e:
+            # Fallback/log, do not crash the compile process
+            pass
+            
+    return msg
+
+
