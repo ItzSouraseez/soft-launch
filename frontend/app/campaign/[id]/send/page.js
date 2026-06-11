@@ -135,7 +135,7 @@ export default function CampaignSendPage({ params }) {
   const blocked = job.blocked || 0;
   const percent = total > 0 ? Math.round((processed / total) * 100) : 0;
 
-  // Determine current active target recipient (Step 133)
+  // Determine current active target recipient (Step 133 implemented)
   const draftRecipients = recipients.filter(r => r.status === "draft");
   const currentTarget = draftRecipients.length > 0 ? draftRecipients[0] : null;
 
