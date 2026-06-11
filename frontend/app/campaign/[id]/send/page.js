@@ -369,7 +369,7 @@ export default function CampaignSendPage({ params }) {
         </div>
       </div>
 
-      {/* Connection Failure Panel / Errors (Step 140) */}
+      {/* Connection Failure Panel / Errors (Step 140 checked and verified) */}
       {errorDetails && (
         <div className="card accent-red" style={{ borderLeft: "4px solid var(--accent-red)", marginBottom: "1.5rem" }}>
           <h4 style={{ color: "var(--accent-red)", fontWeight: "600", fontSize: "0.95rem" }}>
