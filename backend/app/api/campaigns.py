@@ -452,3 +452,63 @@ def trigger_campaign_send(id: str, background_tasks: BackgroundTasks):
         "total_queued": draft_count
     }
 
+@router.get("/campaign/{id}/progress")
+def get_sending_progress(id: str):
+    """
+    Returns the real-time progress metrics for the campaign's active sending job.
+    Falls back to querying database status if no active sending job is tracked in memory.
+    """
+    from app.services.email_sender import sending_jobs
+    
+    try:
+        campaign_oid = ObjectId(id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid campaign ID format.")
+        
+    # Check if in-memory job status exists
+    job = sending_jobs.get(id)
+    if job:
+        return job
+        
+    # Fallback: calculate counts directly from database
+    total = db.recipients.count_documents({"campaign_id": campaign_oid})
+    if total == 0:
+        return {
+            "status": "idle",
+            "total": 0,
+            "processed": 0,
+            "sent": 0,
+            "failed": 0,
+            "blocked": 0,
+            "errors": []
+        }
+        
+    sent = db.recipients.count_documents({"campaign_id": campaign_oid, "status": "sent"})
+    failed = db.recipients.count_documents({"campaign_id": campaign_oid, "status": "failed"})
+    blocked = db.recipients.count_documents({"campaign_id": campaign_oid, "status": "blocked"})
+    
+    processed = sent + failed + blocked
+    
+    # We can check campaign status to see if it is sending
+    campaign = db.campaigns.find_one({"_id": campaign_oid})
+    camp_status = campaign.get("status", "idle") if campaign else "idle"
+    
+    status = "idle"
+    if camp_status == "sending" and processed < total:
+        status = "running"
+    elif camp_status == "sent" or processed >= total:
+        status = "completed"
+    elif camp_status == "failed":
+        status = "failed"
+        
+    return {
+        "status": status,
+        "total": total,
+        "processed": processed,
+        "sent": sent,
+        "failed": failed,
+        "blocked": blocked,
+        "errors": []
+    }
+
+
