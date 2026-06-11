@@ -139,7 +139,7 @@ export default function CampaignSendPage({ params }) {
   const draftRecipients = recipients.filter(r => r.status === "draft");
   const currentTarget = draftRecipients.length > 0 ? draftRecipients[0] : null;
 
-  // ETA calculation mapping remaining counts to delays settings (Step 134)
+  // ETA calculation mapping remaining counts to delays settings (Step 134 implemented)
   const remainingCount = total - processed;
   const getEtaString = () => {
     if (remainingCount <= 0) return "0 seconds";
