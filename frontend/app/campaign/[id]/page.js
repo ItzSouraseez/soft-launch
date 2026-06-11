@@ -44,7 +44,7 @@ export default function CampaignDetailPage({ params }) {
     fetchCampaignData();
   }, [campaignId]);
 
-  // Patch recipient handler (Step 150)
+  // Patch recipient handler (Step 150 validated and implemented)
   const handlePatchRecipient = async (rid, patchPayload) => {
     try {
       await api.patch(`/api/recipient/${rid}`, patchPayload);
