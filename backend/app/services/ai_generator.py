@@ -304,3 +304,165 @@ def build_followup_prompt(
     )
     return prompt
 
+# In-memory tracking for active follow-up generation jobs
+followup_generation_jobs = {}
+followup_generation_jobs_lock = threading.Lock()
+
+def generate_followup_for_recipient(
+    db, 
+    recipient_id: str, 
+    api_key: str, 
+    profile_data: dict, 
+    custom_instruction: str = ""
+) -> dict:
+    """
+    Generates a personalized follow-up email draft using Groq for a single recipient,
+    and saves/updates it in the 'followups' collection.
+    """
+    from groq import Groq
+    from datetime import datetime
+    import json
+    
+    try:
+        recipient_oid = ObjectId(recipient_id)
+    except Exception as e:
+        return {"recipient_id": recipient_id, "status": "failed", "error": f"Invalid ID format: {str(e)}"}
+        
+    recipient = db.recipients.find_one({"_id": recipient_oid})
+    if not recipient:
+        return {"recipient_id": recipient_id, "status": "failed", "error": "Recipient not found"}
+        
+    campaign_id = recipient["campaign_id"]
+    campaign = db.campaigns.find_one({"_id": campaign_id})
+    if not campaign:
+        return {"recipient_id": recipient_id, "status": "failed", "error": "Campaign not found"}
+        
+    recipient_name = recipient.get("name", "")
+    recipient_email = recipient["email"]
+    recipient_status = recipient["status"]
+    original_subject = recipient.get("mail_subject", "")
+    original_body = recipient.get("mail_body", "")
+    incoming_email_body = recipient.get("last_incoming_body", "")
+    ooo_return_date = recipient.get("ooo_return_date")
+    sentiment = recipient.get("reply_sentiment")
+    
+    # Initialize status to generating in followups collection
+    db.followups.update_one(
+        {"recipient_id": recipient_oid},
+        {
+            "$set": {
+                "campaign_id": campaign_id,
+                "email": recipient_email,
+                "name": recipient_name,
+                "status": "generating",
+                "created_at": datetime.utcnow()
+            }
+        },
+        upsert=True
+    )
+    
+    prompt = build_followup_prompt(
+        recipient_name=recipient_name,
+        recipient_status=recipient_status,
+        original_subject=original_subject,
+        original_body=original_body,
+        incoming_email_body=incoming_email_body,
+        ooo_return_date=ooo_return_date,
+        sentiment=sentiment,
+        profile=profile_data,
+        custom_instruction=custom_instruction
+    )
+    
+    client = Groq(api_key=api_key)
+    try:
+        response = client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            messages=[{"role": "user", "content": prompt}],
+            response_format={"type": "json_object"},
+            temperature=0.4,
+        )
+        content = response.choices[0].message.content
+        parsed = json.loads(content)
+        
+        subject = parsed.get("subject", "").strip()
+        body = parsed.get("body", "").strip()
+        
+        if not subject or not body:
+            raise ValueError("Groq returned empty subject or body in JSON response.")
+            
+        update_data = {
+            "status": "draft",
+            "mail_subject": subject,
+            "mail_body": body,
+            "error_message": None,
+            "created_at": datetime.utcnow()
+        }
+        db.followups.update_one({"recipient_id": recipient_oid}, {"$set": update_data})
+        return {"recipient_id": recipient_id, "status": "success"}
+        
+    except Exception as e:
+        error_msg = f"Generation failed: {str(e)}"
+        db.followups.update_one(
+            {"recipient_id": recipient_oid},
+            {"$set": {"status": "failed", "error_message": error_msg}}
+        )
+        return {"recipient_id": recipient_id, "status": "failed", "error": error_msg}
+
+def run_parallel_followup_generation(
+    campaign_id_str: str,
+    recipient_ids: List[str],
+    api_keys: List[str],
+    profile_data: dict,
+    custom_instruction: str = ""
+):
+    """
+    Executes follow-up email generation for all specified recipients concurrently in a thread pool,
+    rotating through Groq API keys and tracking progress in a thread-safe dict.
+    """
+    import concurrent.futures
+    from app.core.db import get_db
+    
+    db = get_db()
+    key_cycler = ThreadSafeKeyCycler(api_keys)
+    total = len(recipient_ids)
+    
+    with followup_generation_jobs_lock:
+        followup_generation_jobs[campaign_id_str] = {
+            "status": "running",
+            "total": total,
+            "processed": 0,
+            "success": 0,
+            "failed": 0,
+            "errors": []
+        }
+        
+    def worker(rid: str):
+        try:
+            key = key_cycler.get_next_key()
+            res = generate_followup_for_recipient(db, rid, key, profile_data, custom_instruction)
+            status = res.get("status")
+            
+            with followup_generation_jobs_lock:
+                job = followup_generation_jobs[campaign_id_str]
+                job["processed"] += 1
+                if status == "success":
+                    job["success"] += 1
+                else:
+                    job["failed"] += 1
+                    if "error" in res:
+                        job["errors"].append(res["error"])
+        except Exception as e:
+            with followup_generation_jobs_lock:
+                job = followup_generation_jobs[campaign_id_str]
+                job["processed"] += 1
+                job["failed"] += 1
+                job["errors"].append(f"Unexpected worker error for {rid}: {str(e)}")
+                
+    max_workers = min(10, len(api_keys) * 3 if api_keys else 5)
+    with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+        executor.map(worker, recipient_ids)
+        
+    with followup_generation_jobs_lock:
+        followup_generation_jobs[campaign_id_str]["status"] = "completed"
+
+
