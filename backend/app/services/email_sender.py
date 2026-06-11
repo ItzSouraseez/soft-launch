@@ -260,16 +260,24 @@ def run_bulk_send(campaign_id_str: str, smtp_config: dict, resume_path: str = No
                     job["errors"].append(error_msg)
                 continue
 
-            # Check if domain is blocked
+            # Check if domain or parent domain is blocked
             email_domain = rec_email.split("@")[-1].strip().lower()
-            is_blocked = db.blocked_domains.find_one({"domain": email_domain})
+            domain_parts = email_domain.split(".")
+            is_blocked = False
+            blocked_matched_domain = email_domain
+            for i in range(len(domain_parts) - 1):
+                check_domain = ".".join(domain_parts[i:])
+                if db.blocked_domains.find_one({"domain": check_domain}):
+                    is_blocked = True
+                    blocked_matched_domain = check_domain
+                    break
             
             if is_blocked:
-                warning_msg = f"Skipping {rec_email}: Domain {email_domain} is blocked."
+                warning_msg = f"Skipping {rec_email}: Domain {email_domain} is blocked (matched rule: {blocked_matched_domain})."
                 logger.warning(warning_msg)
                 db.recipients.update_one(
                     {"_id": rec["_id"]},
-                    {"$set": {"status": "blocked", "error_message": "Domain is in blocked list."}}
+                    {"$set": {"status": "blocked", "error_message": f"Domain matches blocked rule: {blocked_matched_domain}"}}
                 )
                 db.campaigns.update_one(
                     {"_id": campaign_oid},
@@ -280,6 +288,7 @@ def run_bulk_send(campaign_id_str: str, smtp_config: dict, resume_path: str = No
                     job["processed"] += 1
                     job["blocked"] += 1
                 continue
+
 
 
             # Connect check: re-connect if SMTP connection was lost
