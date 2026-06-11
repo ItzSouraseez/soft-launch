@@ -126,4 +126,259 @@ def compile_email(
     return msg, msg_id
 
 
+import threading
+import time
+import random
+from datetime import datetime
+from bson import ObjectId
+from app.core.db import get_db
+
+# In-memory sending jobs tracker
+sending_jobs = {}
+sending_jobs_lock = threading.Lock()
+
+def run_bulk_send(campaign_id_str: str, smtp_config: dict, resume_path: str = None):
+    """
+    Background worker that connects to SMTP, iterates through campaign recipient drafts,
+    checks blocked domains, compiles MIME emails, dispatches them, updates DB statuses,
+    and applies random delays between emails.
+    """
+    db = get_db()
+    try:
+        campaign_oid = ObjectId(campaign_id_str)
+    except Exception as e:
+        with sending_jobs_lock:
+            sending_jobs[campaign_id_str] = {
+                "status": "failed",
+                "error": f"Invalid campaign ID format: {str(e)}",
+                "processed": 0,
+                "total": 0
+            }
+        return
+
+    # Find campaign
+    campaign = db.campaigns.find_one({"_id": campaign_oid})
+    if not campaign:
+        with sending_jobs_lock:
+            sending_jobs[campaign_id_str] = {
+                "status": "failed",
+                "error": "Campaign not found",
+                "processed": 0,
+                "total": 0
+            }
+        return
+
+    # Fetch recipients in draft status
+    recipients = list(db.recipients.find({
+        "campaign_id": campaign_oid,
+        "status": "draft"
+    }))
+
+    total = len(recipients)
+    
+    with sending_jobs_lock:
+        sending_jobs[campaign_id_str] = {
+            "status": "running",
+            "total": total,
+            "processed": 0,
+            "sent": 0,
+            "failed": 0,
+            "blocked": 0,
+            "errors": []
+        }
+
+    if total == 0:
+        with sending_jobs_lock:
+            sending_jobs[campaign_id_str]["status"] = "completed"
+        # Update campaign status
+        db.campaigns.update_one(
+            {"_id": campaign_oid},
+            {"$set": {"status": "sent"}}
+        )
+        return
+
+    # Update campaign status to active sending
+    db.campaigns.update_one(
+        {"_id": campaign_oid},
+        {"$set": {"status": "sending"}}
+    )
+
+    # Establish SMTP connection
+    server = None
+    try:
+        server = connect_smtp(smtp_config)
+        server.login(smtp_config["email"], smtp_config["password"])
+    except Exception as e:
+        error_msg = f"SMTP Login failed: {str(e)}"
+        with sending_jobs_lock:
+            sending_jobs[campaign_id_str]["status"] = "failed"
+            sending_jobs[campaign_id_str]["errors"].append(error_msg)
+        db.campaigns.update_one(
+            {"_id": campaign_oid},
+            {"$set": {"status": "failed"}}
+        )
+        return
+
+    # Fetch delays
+    settings = get_settings()
+    delay_min = int(settings.get("send_delay_min", 30))
+    delay_max = int(settings.get("send_delay_max", 60))
+
+    try:
+        for idx, rec in enumerate(recipients):
+            rec_id_str = str(rec["_id"])
+            rec_email = rec["email"]
+            subject = rec.get("mail_subject", "")
+            body = rec.get("mail_body", "")
+
+            # Ensure subject/body are not empty (could happen if AI generation was skipped/failed)
+            if not subject or not body:
+                error_msg = f"Recipient {rec_email} is missing email subject or body. Skipping."
+                db.recipients.update_one(
+                    {"_id": rec["_id"]},
+                    {"$set": {"status": "failed", "error_message": error_msg}}
+                )
+                db.campaigns.update_one(
+                    {"_id": campaign_oid},
+                    {"$inc": {"failed_count": 1}}
+                )
+                with sending_jobs_lock:
+                    job = sending_jobs[campaign_id_str]
+                    job["processed"] += 1
+                    job["failed"] += 1
+                    job["errors"].append(error_msg)
+                continue
+
+            # Check if domain is blocked
+            email_domain = rec_email.split("@")[-1].strip().lower()
+            is_blocked = db.blocked_domains.find_one({"domain": email_domain})
+            
+            if is_blocked:
+                db.recipients.update_one(
+                    {"_id": rec["_id"]},
+                    {"$set": {"status": "blocked", "error_message": "Domain is in blocked list."}}
+                )
+                db.campaigns.update_one(
+                    {"_id": campaign_oid},
+                    {"$inc": {"failed_count": 1}} # Increment failed or add bounce? Let's count blocked as failed/skipped
+                )
+                with sending_jobs_lock:
+                    job = sending_jobs[campaign_id_str]
+                    job["processed"] += 1
+                    job["blocked"] += 1
+                continue
+
+            # Connect check: re-connect if SMTP connection was lost
+            if not server:
+                try:
+                    server = connect_smtp(smtp_config)
+                    server.login(smtp_config["email"], smtp_config["password"])
+                except Exception as conn_err:
+                    error_msg = f"SMTP Reconnection failed: {str(conn_err)}"
+                    db.recipients.update_one(
+                        {"_id": rec["_id"]},
+                        {"$set": {"status": "failed", "error_message": error_msg}}
+                    )
+                    db.campaigns.update_one(
+                        {"_id": campaign_oid},
+                        {"$inc": {"failed_count": 1}}
+                    )
+                    with sending_jobs_lock:
+                        job = sending_jobs[campaign_id_str]
+                        job["processed"] += 1
+                        job["failed"] += 1
+                        job["errors"].append(error_msg)
+                    continue
+
+            # Build and compile message
+            try:
+                # Followup variables (if any exist)
+                in_reply_to = rec.get("in_reply_to")
+                references = rec.get("references")
+                
+                msg, msg_id = compile_email(
+                    from_email=smtp_config["email"],
+                    to_email=rec_email,
+                    subject=subject,
+                    body=body,
+                    resume_path=resume_path,
+                    in_reply_to=in_reply_to,
+                    references=references
+                )
+                
+                # Send the email
+                server.send_message(msg)
+                
+                # Update DB recipient to sent
+                db.recipients.update_one(
+                    {"_id": rec["_id"]},
+                    {
+                        "$set": {
+                            "status": "sent",
+                            "sent_at": datetime.utcnow(),
+                            "message_id": msg_id,
+                            "error_message": None
+                        }
+                    }
+                )
+                
+                # Increment campaign stats
+                db.campaigns.update_one(
+                    {"_id": campaign_oid},
+                    {"$inc": {"sent_count": 1}}
+                )
+
+                with sending_jobs_lock:
+                    job = sending_jobs[campaign_id_str]
+                    job["processed"] += 1
+                    job["sent"] += 1
+
+            except Exception as send_err:
+                error_msg = f"Failed to send email to {rec_email}: {str(send_err)}"
+                db.recipients.update_one(
+                    {"_id": rec["_id"]},
+                    {"$set": {"status": "failed", "error_message": error_msg}}
+                )
+                db.campaigns.update_one(
+                    {"_id": campaign_oid},
+                    {"$inc": {"failed_count": 1}}
+                )
+                with sending_jobs_lock:
+                    job = sending_jobs[campaign_id_str]
+                    job["processed"] += 1
+                    job["failed"] += 1
+                    job["errors"].append(error_msg)
+                
+                # Close server if connection broke
+                try:
+                    server.quit()
+                except Exception:
+                    pass
+                server = None
+
+            # Apply delay between emails if not the last email
+            if idx < total - 1:
+                delay = random.uniform(delay_min, delay_max)
+                time.sleep(delay)
+
+    finally:
+        if server:
+            try:
+                server.quit()
+            except Exception:
+                pass
+
+        # Mark job completed
+        with sending_jobs_lock:
+            if sending_jobs[campaign_id_str]["status"] == "running":
+                sending_jobs[campaign_id_str]["status"] = "completed"
+
+        # Update final campaign status
+        db.campaigns.update_one(
+            {"_id": campaign_oid},
+            {"$set": {"status": "sent"}}
+        )
+
+
+
 

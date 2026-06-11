@@ -399,3 +399,56 @@ def regenerate_recipient_draft(id: str, rid: str, profile: dict = Depends(verify
         "message": "Email draft regenerated successfully.",
         "recipient": updated_rec
     }
+
+@router.post("/campaign/{id}/send")
+def trigger_campaign_send(id: str, background_tasks: BackgroundTasks):
+    """
+    Triggers bulk email sending for all recipients in the campaign whose status is 'draft'.
+    """
+    from app.services.email_sender import sending_jobs, run_bulk_send, get_smtp_config
+    
+    try:
+        campaign_oid = ObjectId(id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid campaign ID format.")
+        
+    campaign = db.campaigns.find_one({"_id": campaign_oid})
+    if not campaign:
+        raise HTTPException(status_code=404, detail="Campaign not found.")
+        
+    # Check if a sending job is already running
+    job = sending_jobs.get(id)
+    if job and job["status"] == "running":
+        raise HTTPException(status_code=400, detail="A sending job is already running for this campaign.")
+        
+    # Verify SMTP credentials are set
+    smtp_config = get_smtp_config()
+    if not smtp_config["email"] or not smtp_config["password"]:
+        raise HTTPException(status_code=400, detail="SMTP credentials are not configured in settings.")
+        
+    # Get profile for resume attachment path
+    profile = get_profile()
+    resume_path = profile.get("resume_path")
+    
+    # Check if there are draft recipients to send to
+    draft_count = db.recipients.count_documents({
+        "campaign_id": campaign_oid,
+        "status": "draft"
+    })
+    
+    if draft_count == 0:
+        raise HTTPException(status_code=400, detail="No email drafts found in this campaign ready to send.")
+        
+    # Start bulk sending in background
+    background_tasks.add_task(
+        run_bulk_send,
+        campaign_id_str=id,
+        smtp_config=smtp_config,
+        resume_path=resume_path
+    )
+    
+    return {
+        "message": f"Email sending queue started for {draft_count} recipients.",
+        "total_queued": draft_count
+    }
+
