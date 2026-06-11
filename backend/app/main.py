@@ -3,6 +3,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.core.db import init_db
 
+from app.services.inbox_monitor import start_scheduler, shutdown_scheduler
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Initialize database indexes on startup
@@ -12,8 +14,20 @@ async def lifespan(app: FastAPI):
     import os
     os.makedirs("uploads", exist_ok=True)
     
+    # Start the background inbox check scheduler
+    try:
+        start_scheduler()
+    except Exception as e:
+        print(f"Warning: Could not start background inbox check scheduler: {e}")
+        
     yield
-    # Any cleanup operations would go here
+    
+    # Shutdown the background inbox check scheduler
+    try:
+        shutdown_scheduler()
+    except Exception as e:
+        print(f"Warning: Could not shutdown background inbox check scheduler: {e}")
+
 
 app = FastAPI(
     title="Cold Outreach Tool API",

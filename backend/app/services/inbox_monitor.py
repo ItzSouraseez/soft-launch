@@ -404,6 +404,85 @@ def process_incoming_email(db, headers: dict, body: str, api_key: str):
         "category": category
     })
 
+from apscheduler.schedulers.background import BackgroundScheduler
+
+scheduler = None
+
+def check_inbox_and_classify():
+    """
+    Connects to the inbox, searches for recent replies, classifies them,
+    and updates statuses in MongoDB.
+    """
+    from app.core.db import get_db
+    db = get_db()
+    
+    # Retrieve configuration
+    imap_config = get_imap_config()
+    if not imap_config.get("email") or not imap_config.get("password"):
+        logger.warning("IMAP credentials not fully configured. Skipping inbox monitor run.")
+        return
+        
+    settings = get_settings()
+    api_keys = settings.get("groq_api_keys", [])
+    if not api_keys:
+        logger.warning("No Groq API keys available. Skipping inbox monitor run.")
+        return
+    api_key = api_keys[0]  # Use the primary key for classification
+    
+    mail = None
+    try:
+        mail = connect_imap(imap_config)
+        # Search the last 3 days of emails to keep scans quick and fast
+        msg_ids = search_inbox(mail, days_back=3)
+        for mid in msg_ids:
+            try:
+                email_data = fetch_email_by_id(mail, mid)
+                if not email_data:
+                    continue
+                headers = email_data["headers"]
+                body = extract_email_body(email_data["message_object"])
+                process_incoming_email(db, headers, body, api_key)
+            except Exception as e:
+                logger.error(f"Error processing email ID {mid.decode() if isinstance(mid, bytes) else mid}: {str(e)}")
+    except Exception as e:
+        logger.error(f"IMAP search execution failed: {str(e)}")
+    finally:
+        if mail:
+            try:
+                mail.logout()
+            except Exception:
+                pass
+
+def start_scheduler():
+    """
+    Initializes and starts the APScheduler background worker checking inbox every 10 minutes.
+    """
+    global scheduler
+    if scheduler and scheduler.running:
+        return
+        
+    scheduler = BackgroundScheduler()
+    # Check inbox every 10 minutes
+    scheduler.add_job(
+        check_inbox_and_classify,
+        "interval",
+        minutes=10,
+        id="inbox_classify_job",
+        replace_existing=True
+    )
+    scheduler.start()
+    logger.info("APScheduler inbox monitor job started (every 10 minutes).")
+
+def shutdown_scheduler():
+    """
+    Safely shuts down the background scheduler when lifespan terminates.
+    """
+    global scheduler
+    if scheduler and scheduler.running:
+        scheduler.shutdown()
+        logger.info("APScheduler inbox monitor job stopped.")
+
+
 
 
 
