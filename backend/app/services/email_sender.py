@@ -406,6 +406,244 @@ def run_bulk_send(campaign_id_str: str, smtp_config: dict, resume_path: str = No
             {"$set": {"status": "sent"}}
         )
 
+# In-memory sending jobs tracker for followups
+followup_sending_jobs = {}
+followup_sending_jobs_lock = threading.Lock()
+
+def run_followup_send(campaign_id_str: str, smtp_config: dict, resume_path: str = None):
+    """
+    Background worker that connects to SMTP, iterates through followup drafts,
+    checks blocked domains, compiles MIME emails, dispatches them, and updates DB statuses.
+    """
+    db = get_db()
+    try:
+        campaign_oid = ObjectId(campaign_id_str)
+    except Exception as e:
+        with followup_sending_jobs_lock:
+            followup_sending_jobs[campaign_id_str] = {
+                "status": "failed",
+                "error": f"Invalid campaign ID format: {str(e)}",
+                "processed": 0,
+                "total": 0
+            }
+        return
+
+    # Find campaign
+    campaign = db.campaigns.find_one({"_id": campaign_oid})
+    if not campaign:
+        with followup_sending_jobs_lock:
+            followup_sending_jobs[campaign_id_str] = {
+                "status": "failed",
+                "error": "Campaign not found",
+                "processed": 0,
+                "total": 0
+            }
+        return
+
+    # Fetch followups in draft status
+    followups = list(db.followups.find({
+        "campaign_id": campaign_oid,
+        "status": "draft"
+    }))
+
+    total = len(followups)
+    
+    with followup_sending_jobs_lock:
+        followup_sending_jobs[campaign_id_str] = {
+            "status": "running",
+            "total": total,
+            "processed": 0,
+            "sent": 0,
+            "failed": 0,
+            "blocked": 0,
+            "errors": []
+        }
+
+    if total == 0:
+        with followup_sending_jobs_lock:
+            followup_sending_jobs[campaign_id_str]["status"] = "completed"
+        return
+
+    # Establish SMTP connection
+    server = None
+    try:
+        server = connect_smtp(smtp_config)
+        server.login(smtp_config["email"], smtp_config["password"])
+    except Exception as e:
+        error_msg = f"SMTP Login failed: {str(e)}"
+        with followup_sending_jobs_lock:
+            followup_sending_jobs[campaign_id_str]["status"] = "failed"
+            followup_sending_jobs[campaign_id_str]["errors"].append(error_msg)
+        return
+
+    # Fetch delays with robust validation
+    settings = get_settings()
+    try:
+        delay_min = max(0, int(settings.get("send_delay_min", 30)))
+        delay_max = max(0, int(settings.get("send_delay_max", 60)))
+        if delay_min > delay_max:
+            delay_min, delay_max = delay_max, delay_min
+    except (TypeError, ValueError):
+        delay_min, delay_max = 30, 60
+
+    try:
+        for idx, fup in enumerate(followups):
+            fup_id = fup["_id"]
+            rec_id = fup["recipient_id"]
+            fup_email = fup["email"]
+            subject = fup.get("mail_subject", "")
+            body = fup.get("mail_body", "")
+
+            # Ensure subject/body are not empty
+            if not subject or not body:
+                error_msg = f"Followup {fup_email} is missing email subject or body. Skipping."
+                logger.warning(error_msg)
+                db.followups.update_one(
+                    {"_id": fup_id},
+                    {"$set": {"status": "failed", "error_message": error_msg}}
+                )
+                with followup_sending_jobs_lock:
+                    job = followup_sending_jobs[campaign_id_str]
+                    job["processed"] += 1
+                    job["failed"] += 1
+                    job["errors"].append(error_msg)
+                continue
+
+            # Check if domain or parent domain is blocked
+            email_domain = fup_email.split("@")[-1].strip().lower()
+            domain_parts = email_domain.split(".")
+            is_blocked = False
+            blocked_matched_domain = email_domain
+            for i in range(len(domain_parts) - 1):
+                check_domain = ".".join(domain_parts[i:])
+                if db.blocked_domains.find_one({"domain": check_domain}):
+                    is_blocked = True
+                    blocked_matched_domain = check_domain
+                    break
+            
+            if is_blocked:
+                warning_msg = f"Skipping followup {fup_email}: Domain {email_domain} is blocked."
+                logger.warning(warning_msg)
+                db.followups.update_one(
+                    {"_id": fup_id},
+                    {"$set": {"status": "blocked", "error_message": f"Domain matches blocked rule: {blocked_matched_domain}"}}
+                )
+                with followup_sending_jobs_lock:
+                    job = followup_sending_jobs[campaign_id_str]
+                    job["processed"] += 1
+                    job["blocked"] += 1
+                continue
+
+            # Connect check: re-connect if SMTP connection was lost
+            if not server:
+                try:
+                    server = connect_smtp(smtp_config)
+                    server.login(smtp_config["email"], smtp_config["password"])
+                except Exception as conn_err:
+                    error_msg = f"SMTP Reconnection failed: {str(conn_err)}"
+                    db.followups.update_one(
+                        {"_id": fup_id},
+                        {"$set": {"status": "failed", "error_message": error_msg}}
+                    )
+                    with followup_sending_jobs_lock:
+                        job = followup_sending_jobs[campaign_id_str]
+                        job["processed"] += 1
+                        job["failed"] += 1
+                        job["errors"].append(error_msg)
+                    continue
+
+            # Fetch corresponding recipient to get parent thread headers (Step 89)
+            recipient = db.recipients.find_one({"_id": rec_id})
+            in_reply_to = None
+            references = None
+            if recipient:
+                in_reply_to = recipient.get("message_id")
+                references = recipient.get("references")
+
+            # Build and compile message
+            try:
+                msg, msg_id = compile_email(
+                    from_email=smtp_config["email"],
+                    to_email=fup_email,
+                    subject=subject,
+                    body=body,
+                    resume_path=resume_path,
+                    in_reply_to=in_reply_to,
+                    references=references
+                )
+                
+                # Send the email
+                server.send_message(msg)
+                
+                # Update DB followup to sent
+                db.followups.update_one(
+                    {"_id": fup_id},
+                    {
+                        "$set": {
+                            "status": "sent",
+                            "sent_at": datetime.utcnow(),
+                            "message_id": msg_id,
+                            "error_message": None
+                        }
+                    }
+                )
+                
+                # Also update recipient with followup metadata
+                db.recipients.update_one(
+                    {"_id": rec_id},
+                    {
+                        "$set": {
+                            "last_followup_sent_at": datetime.utcnow(),
+                            "last_followup_message_id": msg_id
+                        }
+                    }
+                )
+
+                logger.info(f"Successfully sent followup to {fup_email} with Message-ID: {msg_id}")
+
+                with followup_sending_jobs_lock:
+                    job = followup_sending_jobs[campaign_id_str]
+                    job["processed"] += 1
+                    job["sent"] += 1
+
+            except Exception as send_err:
+                error_msg = f"Failed to send followup to {fup_email}: {str(send_err)}"
+                logger.error(error_msg)
+                db.followups.update_one(
+                    {"_id": fup_id},
+                    {"$set": {"status": "failed", "error_message": error_msg}}
+                )
+                with followup_sending_jobs_lock:
+                    job = followup_sending_jobs[campaign_id_str]
+                    job["processed"] += 1
+                    job["failed"] += 1
+                    job["errors"].append(error_msg)
+                
+                # Close server if connection broke
+                try:
+                    server.quit()
+                except Exception:
+                    pass
+                server = None
+
+            # Apply delay between emails if not the last email
+            if idx < total - 1:
+                delay = random.uniform(delay_min, delay_max)
+                time.sleep(delay)
+
+    finally:
+        if server:
+            try:
+                server.quit()
+            except Exception:
+                pass
+
+        # Mark job completed
+        with followup_sending_jobs_lock:
+            if followup_sending_jobs[campaign_id_str]["status"] == "running":
+                followup_sending_jobs[campaign_id_str]["status"] = "completed"
+
+
 
 
 
