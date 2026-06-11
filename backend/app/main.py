@@ -26,6 +26,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+from app.api.settings import router as settings_router
+app.include_router(settings_router)
+
 @app.get("/")
 def read_root():
     return {
