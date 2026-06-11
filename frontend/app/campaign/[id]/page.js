@@ -190,7 +190,7 @@ export default function CampaignDetailPage({ params }) {
         </div>
       </div>
 
-      {/* Delivery Issue Banner Alerts (Step 149) */}
+      {/* Delivery Issue Banner Alerts (Step 149 implemented) */}
       {bouncedCount > 0 && (
         <div 
           className="card accent-red" 
