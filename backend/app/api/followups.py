@@ -201,5 +201,66 @@ def preview_followups(id: str):
         
     return formatted
 
+class FollowupUpdateRequest(BaseModel):
+    mail_subject: Optional[str] = None
+    mail_body: Optional[str] = None
+
+@router.put("/followup/{fid}")
+def update_followup(fid: str, payload: FollowupUpdateRequest):
+    """
+    PUT endpoint to update the subject and body of a follow-up draft.
+    """
+    try:
+        followup_oid = ObjectId(fid)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid follow-up ID format.")
+        
+    followup = db.followups.find_one({"_id": followup_oid})
+    if not followup:
+        raise HTTPException(status_code=404, detail="Follow-up draft not found.")
+        
+    update_data = {}
+    if payload.mail_subject is not None:
+        update_data["mail_subject"] = payload.mail_subject.strip()
+    if payload.mail_body is not None:
+        update_data["mail_body"] = payload.mail_body.strip()
+        
+    if update_data:
+        db.followups.update_one({"_id": followup_oid}, {"$set": update_data})
+        
+    updated = db.followups.find_one({"_id": followup_oid})
+    updated["_id"] = str(updated["_id"])
+    updated["campaign_id"] = str(updated["campaign_id"])
+    updated["recipient_id"] = str(updated["recipient_id"])
+    if "created_at" in updated and updated["created_at"]:
+        updated["created_at"] = updated["created_at"].isoformat()
+        
+    return {
+        "message": "Follow-up draft updated successfully.",
+        "followup": updated
+    }
+
+@router.delete("/followup/{fid}")
+def delete_followup(fid: str):
+    """
+    DELETE endpoint to remove a follow-up draft.
+    """
+    try:
+        followup_oid = ObjectId(fid)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid follow-up ID format.")
+        
+    followup = db.followups.find_one({"_id": followup_oid})
+    if not followup:
+        raise HTTPException(status_code=404, detail="Follow-up draft not found.")
+        
+    db.followups.delete_one({"_id": followup_oid})
+    
+    return {
+        "message": "Follow-up draft deleted successfully.",
+        "followup_id": fid
+    }
+
+
 
 
