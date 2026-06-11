@@ -317,6 +317,7 @@ export default function CampaignSendPage({ params }) {
             </thead>
             <tbody>
               {recipients.map((rec) => {
+                // Step 136: Map status to checkmarks/warnings
                 let statusClass = "status-badge idle";
                 let iconSymbol = "⏳";
                 
