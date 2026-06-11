@@ -251,12 +251,26 @@ def classify_incoming_email(api_key: str, subject: str, body: str) -> dict:
         )
         content = response.choices[0].message.content
         parsed = json.loads(content)
+        category = parsed.get("category", "other")
+        sentiment = parsed.get("sentiment")
+        bounce_reason = parsed.get("bounce_reason")
+        return_date = parsed.get("return_date")
+        
+        # Enforce strict date formatting for OOO return dates
+        if category == "ooo" and return_date:
+            return_date = str(return_date).strip()
+            if not re.match(r"^\d{4}-\d{2}-\d{2}$", return_date):
+                return_date = None
+        else:
+            return_date = None
+            
         return {
-            "category": parsed.get("category", "other"),
-            "sentiment": parsed.get("sentiment"),
-            "bounce_reason": parsed.get("bounce_reason"),
-            "return_date": parsed.get("return_date")
+            "category": category,
+            "sentiment": sentiment,
+            "bounce_reason": bounce_reason,
+            "return_date": return_date
         }
+
     except Exception as e:
         logger.error(f"Error classifying email: {e}")
         return {"category": "other", "sentiment": "neutral", "bounce_reason": None, "return_date": None}
