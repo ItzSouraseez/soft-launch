@@ -169,4 +169,37 @@ def get_followup_generation_progress(id: str):
         "errors": []
     }
 
+@router.get("/campaign/{id}/followup/preview")
+def preview_followups(id: str):
+    """
+    GET endpoint returning all follow-up drafts for a campaign.
+    """
+    try:
+        campaign_oid = ObjectId(id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid campaign ID format.")
+        
+    campaign = db.campaigns.find_one({"_id": campaign_oid})
+    if not campaign:
+        raise HTTPException(status_code=404, detail="Campaign not found.")
+        
+    followups = list(db.followups.find({"campaign_id": campaign_oid}))
+    
+    formatted = []
+    for f in followups:
+        formatted.append({
+            "id": str(f["_id"]),
+            "recipient_id": str(f["recipient_id"]),
+            "email": f["email"],
+            "name": f.get("name", ""),
+            "status": f["status"],
+            "mail_subject": f.get("mail_subject", ""),
+            "mail_body": f.get("mail_body", ""),
+            "error_message": f.get("error_message"),
+            "created_at": f["created_at"].isoformat() if isinstance(f.get("created_at"), datetime) else None
+        })
+        
+    return formatted
+
+
 
