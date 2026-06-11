@@ -261,6 +261,107 @@ def delete_followup(fid: str):
         "followup_id": fid
     }
 
+@router.post("/campaign/{id}/followup/send")
+def trigger_followup_send(id: str, background_tasks: BackgroundTasks):
+    """
+    Triggers bulk follow-up sending for all drafts in the campaign.
+    """
+    from app.services.email_sender import followup_sending_jobs, run_followup_send, get_smtp_config
+    from app.core.config_manager import get_profile
+    
+    try:
+        campaign_oid = ObjectId(id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid campaign ID format.")
+        
+    campaign = db.campaigns.find_one({"_id": campaign_oid})
+    if not campaign:
+        raise HTTPException(status_code=404, detail="Campaign not found.")
+        
+    # Check if a sending job is already running
+    job = followup_sending_jobs.get(id)
+    if job and job["status"] == "running":
+        raise HTTPException(status_code=400, detail="A follow-up sending job is already running for this campaign.")
+        
+    # Verify SMTP credentials
+    smtp_config = get_smtp_config()
+    if not smtp_config["email"] or not smtp_config["password"]:
+        raise HTTPException(status_code=400, detail="SMTP credentials are not configured in settings.")
+        
+    # Get profile for resume attachment path
+    profile = get_profile()
+    resume_path = profile.get("resume_path")
+    
+    # Check if there are drafts to send
+    draft_count = db.followups.count_documents({
+        "campaign_id": campaign_oid,
+        "status": "draft"
+    })
+    
+    if draft_count == 0:
+        raise HTTPException(status_code=400, detail="No follow-up drafts found in this campaign ready to send.")
+        
+    # Start background send task
+    background_tasks.add_task(
+        run_followup_send,
+        campaign_id_str=id,
+        smtp_config=smtp_config,
+        resume_path=resume_path
+    )
+    
+    return {
+        "message": f"Follow-up sending queue started for {draft_count} recipients.",
+        "total_queued": draft_count
+    }
+
+@router.get("/campaign/{id}/followup/progress")
+def get_followup_sending_progress(id: str):
+    """
+    Returns the real-time progress metrics for the campaign's active follow-up sending job.
+    """
+    from app.services.email_sender import followup_sending_jobs
+    
+    try:
+        campaign_oid = ObjectId(id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid campaign ID format.")
+        
+    job = followup_sending_jobs.get(id)
+    if job:
+        return job
+        
+    # Fallback to database
+    total = db.followups.count_documents({"campaign_id": campaign_oid})
+    if total == 0:
+        return {
+            "status": "idle",
+            "total": 0,
+            "processed": 0,
+            "sent": 0,
+            "failed": 0,
+            "blocked": 0,
+            "errors": []
+        }
+        
+    sent = db.followups.count_documents({"campaign_id": campaign_oid, "status": "sent"})
+    failed = db.followups.count_documents({"campaign_id": campaign_oid, "status": "failed"})
+    blocked = db.followups.count_documents({"campaign_id": campaign_oid, "status": "blocked"})
+    generating = db.followups.count_documents({"campaign_id": campaign_oid, "status": "generating"})
+    
+    processed = sent + failed + blocked
+    is_running = generating > 0 and processed < total
+    
+    return {
+        "status": "running" if is_running else "completed" if processed >= total else "idle",
+        "total": total,
+        "processed": processed,
+        "sent": sent,
+        "failed": failed,
+        "blocked": blocked,
+        "errors": []
+    }
+
+
 
 
 
