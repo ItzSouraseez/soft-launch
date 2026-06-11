@@ -72,3 +72,22 @@ def parse_recipient_string(raw_text: str) -> list[dict]:
             recipients.append({"email": email, "name": name})
             
     return recipients
+
+def deduplicate_recipients(recipients: list[dict]) -> list[dict]:
+    """
+    Deduplicates a list of recipients by email address (case-insensitive),
+    preserving the first occurrence and maintaining the original order.
+    """
+    seen = set()
+    unique_recipients = []
+    for r in recipients:
+        email = r.get("email", "").strip().lower()
+        if not email:
+            continue
+        if email not in seen:
+            seen.add(email)
+            unique_recipients.append({
+                "email": email,
+                "name": r.get("name", "").strip()
+            })
+    return unique_recipients
