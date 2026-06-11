@@ -1,5 +1,9 @@
 import smtplib
+import logging
 from app.core.config_manager import get_settings
+
+logger = logging.getLogger("app.services.email_sender")
+
 
 def get_smtp_config() -> dict:
     """
@@ -240,6 +244,7 @@ def run_bulk_send(campaign_id_str: str, smtp_config: dict, resume_path: str = No
             # Ensure subject/body are not empty (could happen if AI generation was skipped/failed)
             if not subject or not body:
                 error_msg = f"Recipient {rec_email} is missing email subject or body. Skipping."
+                logger.warning(error_msg)
                 db.recipients.update_one(
                     {"_id": rec["_id"]},
                     {"$set": {"status": "failed", "error_message": error_msg}}
@@ -260,19 +265,22 @@ def run_bulk_send(campaign_id_str: str, smtp_config: dict, resume_path: str = No
             is_blocked = db.blocked_domains.find_one({"domain": email_domain})
             
             if is_blocked:
+                warning_msg = f"Skipping {rec_email}: Domain {email_domain} is blocked."
+                logger.warning(warning_msg)
                 db.recipients.update_one(
                     {"_id": rec["_id"]},
                     {"$set": {"status": "blocked", "error_message": "Domain is in blocked list."}}
                 )
                 db.campaigns.update_one(
                     {"_id": campaign_oid},
-                    {"$inc": {"failed_count": 1}} # Increment failed or add bounce? Let's count blocked as failed/skipped
+                    {"$inc": {"failed_count": 1}}
                 )
                 with sending_jobs_lock:
                     job = sending_jobs[campaign_id_str]
                     job["processed"] += 1
                     job["blocked"] += 1
                 continue
+
 
             # Connect check: re-connect if SMTP connection was lost
             if not server:
@@ -334,6 +342,8 @@ def run_bulk_send(campaign_id_str: str, smtp_config: dict, resume_path: str = No
                     {"$inc": {"sent_count": 1}}
                 )
 
+                logger.info(f"Successfully sent email to {rec_email} with Message-ID: {msg_id}")
+
                 with sending_jobs_lock:
                     job = sending_jobs[campaign_id_str]
                     job["processed"] += 1
@@ -341,6 +351,7 @@ def run_bulk_send(campaign_id_str: str, smtp_config: dict, resume_path: str = No
 
             except Exception as send_err:
                 error_msg = f"Failed to send email to {rec_email}: {str(send_err)}"
+                logger.error(error_msg)
                 db.recipients.update_one(
                     {"_id": rec["_id"]},
                     {"$set": {"status": "failed", "error_message": error_msg}}
@@ -361,6 +372,7 @@ def run_bulk_send(campaign_id_str: str, smtp_config: dict, resume_path: str = No
                 except Exception:
                     pass
                 server = None
+
 
             # Apply delay between emails if not the last email
             if idx < total - 1:
