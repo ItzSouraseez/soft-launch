@@ -275,5 +275,58 @@ def classify_incoming_email(api_key: str, subject: str, body: str) -> dict:
         logger.error(f"Error classifying email: {e}")
         return {"category": "other", "sentiment": "neutral", "bounce_reason": None, "return_date": None}
 
+def extract_email_address(from_header: str) -> str:
+    """
+    Extracts raw email address from a 'From' header (e.g. 'John Doe <john@company.com>' -> 'john@company.com').
+    """
+    if not from_header:
+        return ""
+    match = re.search(r"<([^>]+)>", from_header)
+    if match:
+        return match.group(1).strip().lower()
+    return from_header.strip().lower()
+
+def find_matching_recipient(db, headers: dict) -> dict:
+    """
+    Matches an incoming email's headers to a recipient record in the database.
+    First matches by In-Reply-To -> message_id.
+    Falls back to case-insensitive 'From' email address matching.
+    """
+    in_reply_to = headers.get("in_reply_to", "").strip()
+    sender_email = extract_email_address(headers.get("from", ""))
+    
+    if in_reply_to:
+        # Query by Message-ID
+        rec = db.recipients.find_one({"message_id": in_reply_to})
+        if rec:
+            return rec
+            
+        # Try searching References header space-separated message IDs
+        references = headers.get("references", "").strip()
+        if references:
+            ref_ids = [r.strip() for r in references.split() if r.strip()]
+            rec = db.recipients.find_one({"message_id": {"$in": ref_ids}})
+            if rec:
+                return rec
+                
+    if sender_email:
+        # Fallback to From email address. Look for recently sent first.
+        rec = db.recipients.find_one(
+            {"email": sender_email, "status": "sent"},
+            sort=[("sent_at", -1)]
+        )
+        if rec:
+            return rec
+            
+        # Fallback to any campaign record
+        rec = db.recipients.find_one(
+            {"email": sender_email},
+            sort=[("created_at", -1)]
+        )
+        return rec
+        
+    return None
+
+
 
 
