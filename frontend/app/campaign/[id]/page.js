@@ -113,7 +113,7 @@ export default function CampaignDetailPage({ params }) {
     );
   }
 
-  // Filter logic (Step 142)
+  // Filter logic (Step 142 implemented)
   const filteredRecipients = recipients.filter(r => {
     if (activeTab === "all") return true;
     if (activeTab === "bounces") return r.status === "bounced";
