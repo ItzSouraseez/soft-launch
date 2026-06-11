@@ -280,7 +280,7 @@ export default function CampaignDetailPage({ params }) {
 
                 return (
                   <tr key={rec._id} style={{ borderBottom: isExpanded || isPasting ? "none" : "1px solid var(--border-light)" }}>
-                    {/* Expander Button (Step 148) */}
+                    {/* Expander Button (Step 148 implemented) */}
                     <td>
                       <button
                         onClick={() => setExpandedRow(isExpanded ? null : rec._id)}
