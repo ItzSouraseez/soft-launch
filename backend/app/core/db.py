@@ -20,13 +20,19 @@ def init_db():
     - blocked_domains: unique index on 'domain'
     - recipients: index on 'email', 'campaign_id', and compound index on ('campaign_id', 'email')
     """
-    # Create unique index on domain field for blocked_domains
-    db.blocked_domains.create_index("domain", unique=True)
-    
-    # Create indexes on recipients collection
-    db.recipients.create_index("email")
-    db.recipients.create_index("campaign_id")
-    db.recipients.create_index([("campaign_id", 1), ("email", 1)])
+    try:
+        # Create unique index on domain field for blocked_domains
+        db.blocked_domains.create_index("domain", unique=True)
+        
+        # Create indexes on recipients collection
+        db.recipients.create_index("email")
+        db.recipients.create_index("campaign_id")
+        db.recipients.create_index([("campaign_id", 1), ("email", 1)])
+        print("Database indexes initialized successfully.")
+        return True
+    except Exception as e:
+        print(f"Warning: Could not initialize database indexes: {e}")
+        return False
 
 def close_db_connection():
     """
