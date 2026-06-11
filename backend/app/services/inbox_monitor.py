@@ -370,14 +370,14 @@ def process_incoming_email(db, headers: dict, body: str, api_key: str):
     elif category == "ooo":
         update_fields = {
             "status": "ooo",
-            "replied_at": datetime.utcnow(),
+            "replied_at": datetime.datetime.utcnow(),
             "ooo_return_date": classification["return_date"]
         }
         campaign_inc = {"ooo_count": 1}
     elif category == "reply":
         update_fields = {
             "status": "replied",
-            "replied_at": datetime.utcnow(),
+            "replied_at": datetime.datetime.utcnow(),
             "reply_sentiment": classification["sentiment"] or "neutral"
         }
         campaign_inc = {"reply_count": 1}
@@ -400,9 +400,10 @@ def process_incoming_email(db, headers: dict, body: str, api_key: str):
         "message_id": incoming_msg_id,
         "recipient_id": recipient_id,
         "campaign_id": campaign_id,
-        "processed_at": datetime.utcnow(),
+        "processed_at": datetime.datetime.utcnow(),
         "category": category
     })
+
 
 from apscheduler.schedulers.background import BackgroundScheduler
 
