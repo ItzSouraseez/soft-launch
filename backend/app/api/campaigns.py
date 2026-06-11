@@ -1,6 +1,6 @@
 import os
 from bson import ObjectId
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, BackgroundTasks
 from pydantic import BaseModel
 from typing import List, Optional
 from app.core.db import get_db
@@ -242,4 +242,160 @@ def delete_campaign(id: str):
         "message": "Campaign and associated records deleted successfully.",
         "campaign_id": id,
         "total_recipients_deleted": rec_result.deleted_count
+    }
+
+@router.post("/campaign/{id}/generate")
+def trigger_email_generation(id: str, background_tasks: BackgroundTasks, profile: dict = Depends(verify_resume_uploaded)):
+    """
+    Triggers concurrent email draft generation for all recipients in the campaign
+    who are currently in 'draft', 'failed', or 'generating' status.
+    """
+    from app.services.ai_generator import generation_jobs, run_parallel_generation
+    from app.core.config_manager import get_settings
+    
+    try:
+        campaign_oid = ObjectId(id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid campaign ID format.")
+        
+    campaign = db.campaigns.find_one({"_id": campaign_oid})
+    if not campaign:
+        raise HTTPException(status_code=404, detail="Campaign not found.")
+        
+    # Check if a job is already running for this campaign
+    job = generation_jobs.get(id)
+    if job and job["status"] == "running":
+        raise HTTPException(status_code=400, detail="A generation job is already running for this campaign.")
+        
+    # Get Groq API keys
+    settings = get_settings()
+    api_keys = settings.get("groq_api_keys", [])
+    if not api_keys:
+        raise HTTPException(status_code=400, detail="Groq API keys are not configured in settings. Please configure them first.")
+        
+    # Get target recipients
+    recipients = list(db.recipients.find({
+        "campaign_id": campaign_oid,
+        "status": {"$in": ["draft", "failed", "generating"]}
+    }))
+    
+    if not recipients:
+        return {
+            "message": "No recipients in draft/failed status found to generate drafts for.",
+            "total_triggered": 0
+        }
+        
+    recipient_ids = [str(r["_id"]) for r in recipients]
+    
+    # Start the parallel task in the background
+    background_tasks.add_task(
+        run_parallel_generation,
+        campaign_id_str=id,
+        recipient_ids=recipient_ids,
+        api_keys=api_keys,
+        profile_data=profile,
+        campaign_data=campaign
+    )
+    
+    return {
+        "message": f"Email generation started in background for {len(recipient_ids)} recipients.",
+        "total_triggered": len(recipient_ids)
+    }
+
+@router.get("/campaign/{id}/generate-progress")
+def get_generation_progress(id: str):
+    """
+    Returns the real-time progress metrics for the campaign's active draft generation job.
+    Falls back to querying database status if no active job is tracked in memory.
+    """
+    from app.services.ai_generator import generation_jobs
+    
+    try:
+        campaign_oid = ObjectId(id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid campaign ID format.")
+        
+    # Check if in-memory job status exists
+    job = generation_jobs.get(id)
+    if job:
+        return job
+        
+    # Fallback: calculate counts directly from database
+    total = db.recipients.count_documents({"campaign_id": campaign_oid})
+    if total == 0:
+        return {
+            "status": "idle",
+            "total": 0,
+            "processed": 0,
+            "success": 0,
+            "failed": 0,
+            "blocked": 0,
+            "errors": []
+        }
+        
+    generating = db.recipients.count_documents({"campaign_id": campaign_oid, "status": "generating"})
+    success = db.recipients.count_documents({"campaign_id": campaign_oid, "status": "draft", "mail_body": {"$ne": ""}})
+    failed = db.recipients.count_documents({"campaign_id": campaign_oid, "status": "failed"})
+    blocked = db.recipients.count_documents({"campaign_id": campaign_oid, "status": "blocked"})
+    
+    processed = success + failed + blocked
+    is_running = generating > 0 and processed < total
+    
+    return {
+        "status": "running" if is_running else "completed" if processed >= total else "idle",
+        "total": total,
+        "processed": processed,
+        "success": success,
+        "failed": failed,
+        "blocked": blocked,
+        "errors": []
+    }
+
+@router.post("/campaign/{id}/recipient/{rid}/regenerate")
+def regenerate_recipient_draft(id: str, rid: str, profile: dict = Depends(verify_resume_uploaded)):
+    """
+    Manually regenerates the personalized email draft for a single recipient.
+    """
+    from app.services.ai_generator import generate_draft_for_recipient
+    from app.core.config_manager import get_settings
+    
+    try:
+        campaign_oid = ObjectId(id)
+        recipient_oid = ObjectId(rid)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid campaign or recipient ID format.")
+        
+    campaign = db.campaigns.find_one({"_id": campaign_oid})
+    if not campaign:
+        raise HTTPException(status_code=404, detail="Campaign not found.")
+        
+    recipient = db.recipients.find_one({"_id": recipient_oid, "campaign_id": campaign_oid})
+    if not recipient:
+        raise HTTPException(status_code=404, detail="Recipient not found under this campaign.")
+        
+    # Get Groq API keys
+    settings = get_settings()
+    api_keys = settings.get("groq_api_keys", [])
+    if not api_keys:
+        raise HTTPException(status_code=400, detail="Groq API keys are not configured in settings. Please configure them first.")
+        
+    # Execute generation synchronously for single target
+    key = api_keys[0]  # Just use the first key
+    res = generate_draft_for_recipient(db, rid, key, profile, campaign)
+    
+    if res.get("status") == "failed":
+        raise HTTPException(status_code=500, detail=f"Email regeneration failed: {res.get('error')}")
+    elif res.get("status") == "blocked":
+        raise HTTPException(status_code=400, detail="Email regeneration skipped because the recipient's domain is blocked.")
+        
+    # Fetch and return the updated recipient
+    updated_rec = db.recipients.find_one({"_id": recipient_oid})
+    updated_rec["_id"] = str(updated_rec["_id"])
+    updated_rec["campaign_id"] = str(updated_rec["campaign_id"])
+    if "created_at" in updated_rec and updated_rec["created_at"]:
+        updated_rec["created_at"] = updated_rec["created_at"].isoformat()
+        
+    return {
+        "message": "Email draft regenerated successfully.",
+        "recipient": updated_rec
     }
