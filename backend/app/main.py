@@ -27,7 +27,10 @@ app.add_middleware(
 )
 
 from app.api.settings import router as settings_router
+from app.api.profile import router as profile_router
+
 app.include_router(settings_router)
+app.include_router(profile_router)
 
 @app.get("/")
 def read_root():
