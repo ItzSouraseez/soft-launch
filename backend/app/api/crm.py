@@ -325,6 +325,108 @@ def get_blocked_domains():
         })
     return formatted
 
+class RecipientStatusPatchRequest(BaseModel):
+    status: Optional[str] = None
+    reply_sentiment: Optional[str] = None
+    ooo_return_date: Optional[str] = None
+    error_message: Optional[str] = None
+
+@router.patch("/recipient/{id}")
+def update_recipient_status_manually(id: str, payload: RecipientStatusPatchRequest):
+    """
+    Manually patches a recipient's campaign sending/reply status and metadata.
+    """
+    try:
+        recipient_oid = ObjectId(id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid recipient ID format.")
+        
+    recipient = db.recipients.find_one({"_id": recipient_oid})
+    if not recipient:
+        raise HTTPException(status_code=404, detail="Recipient not found.")
+        
+    old_status = recipient.get("status", "draft")
+    campaign_id = recipient.get("campaign_id")
+    
+    update_data = {}
+    if payload.status is not None:
+        new_status = payload.status.strip().lower()
+        valid_statuses = ["draft", "generating", "failed", "blocked", "sent", "replied", "ooo", "bounced"]
+        if new_status not in valid_statuses:
+            raise HTTPException(status_code=400, detail=f"Invalid status value. Must be one of {valid_statuses}")
+        update_data["status"] = new_status
+        
+    if payload.reply_sentiment is not None:
+        update_data["reply_sentiment"] = payload.reply_sentiment.strip() if payload.reply_sentiment else None
+        
+    if payload.ooo_return_date is not None:
+        return_date = payload.ooo_return_date.strip()
+        if return_date:
+            import re
+            if not re.match(r"^\d{4}-\d{2}-\d{2}$", return_date):
+                raise HTTPException(status_code=400, detail="Return date must be in YYYY-MM-DD format.")
+            update_data["ooo_return_date"] = return_date
+        else:
+            update_data["ooo_return_date"] = None
+            
+    if payload.error_message is not None:
+        update_data["error_message"] = payload.error_message.strip() if payload.error_message else None
+        
+    if not update_data:
+        return {"message": "No fields to update.", "recipient_id": id}
+        
+    # Update replied_at timestamp if marking replied/ooo and it wasn't already set
+    if "status" in update_data and update_data["status"] in ["replied", "ooo"] and not recipient.get("replied_at"):
+        update_data["replied_at"] = datetime.utcnow()
+        
+    db.recipients.update_one({"_id": recipient_oid}, {"$set": update_data})
+    
+    # Adjust campaign statistics counters
+    if "status" in update_data and update_data["status"] != old_status:
+        dec_field = None
+        if old_status == "sent":
+            dec_field = "sent_count"
+        elif old_status == "replied":
+            dec_field = "reply_count"
+        elif old_status == "ooo":
+            dec_field = "ooo_count"
+        elif old_status == "bounced":
+            dec_field = "bounce_count"
+        elif old_status == "failed":
+            dec_field = "failed_count"
+            
+        inc_field = None
+        new_status = update_data["status"]
+        if new_status == "sent":
+            inc_field = "sent_count"
+        elif new_status == "replied":
+            inc_field = "reply_count"
+        elif new_status == "ooo":
+            inc_field = "ooo_count"
+        elif new_status == "bounced":
+            inc_field = "bounce_count"
+        elif new_status == "failed":
+            inc_field = "failed_count"
+            
+        campaign_update = {}
+        if dec_field:
+            campaign_update[dec_field] = -1
+        if inc_field:
+            campaign_update[inc_field] = 1
+            
+        if campaign_update:
+            db.campaigns.update_one(
+                {"_id": campaign_id},
+                {"$inc": campaign_update}
+            )
+            
+    return {
+        "message": "Recipient status patched successfully.",
+        "recipient_id": id,
+        "updated_fields": list(update_data.keys())
+    }
+
+
 
 
 
