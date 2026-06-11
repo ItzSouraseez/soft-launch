@@ -1,4 +1,7 @@
+import json
+from groq import Groq
 import pdfplumber
+from app.core.config_manager import get_settings
 
 def extract_text_from_pdf(pdf_path: str) -> str:
     """
@@ -49,3 +52,38 @@ Ensure the output is strictly valid JSON matching the description above. Do not 
 
 Raw Resume Text:
 {raw_text}"""
+
+def parse_resume_with_groq(raw_text: str) -> dict:
+    """
+    Sends raw resume text to Groq API and parses it into structured JSON.
+    """
+    settings = get_settings()
+    keys = settings.get("groq_api_keys", [])
+    if not keys:
+        raise ValueError("Groq API key not configured in settings.")
+    
+    # Use the first available key
+    api_key = keys[0]
+    
+    client = Groq(api_key=api_key)
+    prompt = get_resume_parsing_prompt(raw_text)
+    
+    try:
+        response = client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            messages=[
+                {
+                    "role": "user",
+                    "content": prompt
+                }
+            ],
+            response_format={"type": "json_object"},
+            temperature=0.1
+        )
+        
+        content = response.choices[0].message.content
+        parsed_json = json.loads(content)
+        return parsed_json
+    except Exception as e:
+        print(f"Error calling Groq API: {e}")
+        raise ValueError(f"Failed to parse resume content with Groq: {str(e)}")
