@@ -300,7 +300,7 @@ export default function CampaignSendPage({ params }) {
         </div>
       </div>
 
-      {/* Active Sending Rows / Recipients Table (Steps 135 & 136 implemented) */}
+      {/* Active Sending Rows / Recipients Table (Steps 135 & 136 implemented, Step 138 verified) */}
       <div className="table-container" style={{ marginBottom: "1.5rem" }}>
         <div style={{ padding: "1rem 1.5rem", borderBottom: "1px solid var(--border-light)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <h3 style={{ fontSize: "0.95rem", fontWeight: "600" }}>Outbox Delivery Statuses</h3>
