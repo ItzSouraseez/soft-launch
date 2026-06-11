@@ -297,22 +297,27 @@ export default function CampaignDetailPage({ params }) {
                       <div style={{ fontSize: "0.8rem", color: "var(--text-secondary)", fontFamily: "var(--font-mono)" }}>{rec.email}</div>
                     </td>
 
-                    {/* Status Select dropdown override (Step 144) */}
+                    {/* Status Select dropdown override (Step 144 implemented) */}
                     <td>
-                      <select
-                        value={rec.status}
-                        onChange={(e) => handlePatchRecipient(rec._id, { status: e.target.value })}
-                        className="select-field"
-                        style={{ padding: "0.35rem 0.5rem", fontSize: "0.85rem", width: "130px" }}
-                      >
-                        <option value="draft">Draft</option>
-                        <option value="sent">Sent</option>
-                        <option value="replied">Replied</option>
-                        <option value="ooo">OOO</option>
-                        <option value="bounced">Bounced</option>
-                        <option value="failed">Failed</option>
-                        <option value="blocked">Blocked</option>
-                      </select>
+                      <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                        <span className={`status-badge ${rec.status}`} style={{ padding: "0.15rem 0.4rem", fontSize: "0.7rem", whiteSpace: "nowrap" }}>
+                          {rec.status}
+                        </span>
+                        <select
+                          value={rec.status}
+                          onChange={(e) => handlePatchRecipient(rec._id, { status: e.target.value })}
+                          className="select-field"
+                          style={{ padding: "0.25rem 0.4rem", fontSize: "0.8rem", width: "110px" }}
+                        >
+                          <option value="draft">Draft</option>
+                          <option value="sent">Sent</option>
+                          <option value="replied">Replied</option>
+                          <option value="ooo">OOO</option>
+                          <option value="bounced">Bounced</option>
+                          <option value="failed">Failed</option>
+                          <option value="blocked">Blocked</option>
+                        </select>
+                      </div>
                     </td>
 
                     {/* Checkback Date selector (Step 146) */}
