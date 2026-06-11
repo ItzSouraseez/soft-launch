@@ -19,7 +19,8 @@ def get_eligible_recipients_list(campaign_oid: ObjectId) -> List[dict]:
     """
     recipients = list(db.recipients.find({
         "campaign_id": campaign_oid,
-        "status": {"$in": ["sent", "ooo", "replied"]}
+        "status": {"$in": ["sent", "ooo", "replied"]},
+        "exclude_followup": {"$ne": True}
     }))
     
     if not recipients:
