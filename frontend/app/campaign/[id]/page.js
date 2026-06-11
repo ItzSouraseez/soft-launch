@@ -251,7 +251,7 @@ export default function CampaignDetailPage({ params }) {
         ))}
       </div>
 
-      {/* Recipients Table (Step 143) */}
+      {/* Recipients Table (Step 143 implemented) */}
       <div className="table-container">
         <div className="table-wrapper">
           <table className="data-table">
