@@ -320,7 +320,7 @@ export default function CampaignDetailPage({ params }) {
                       </div>
                     </td>
 
-                    {/* Checkback Date selector (Step 146) */}
+                    {/* Checkback Date selector (Step 146 implemented) */}
                     <td>
                       <input
                         type="date"
@@ -331,7 +331,7 @@ export default function CampaignDetailPage({ params }) {
                       />
                     </td>
 
-                    {/* Exclude checkbox (Step 147) */}
+                    {/* Exclude checkbox (Step 147 implemented) */}
                     <td>
                       <label style={{ display: "inline-flex", alignItems: "center", gap: "0.5rem", fontSize: "0.85rem", cursor: "pointer" }}>
                         <input
