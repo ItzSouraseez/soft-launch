@@ -51,6 +51,7 @@ from app.api.resume import router as resume_router
 from app.api.campaigns import router as campaigns_router
 from app.api.inbox import router as inbox_router
 from app.api.crm import router as crm_router
+from app.api.followups import router as followups_router
 
 app.include_router(settings_router)
 app.include_router(profile_router)
@@ -58,6 +59,7 @@ app.include_router(resume_router)
 app.include_router(campaigns_router)
 app.include_router(inbox_router)
 app.include_router(crm_router)
+app.include_router(followups_router)
 
 
 

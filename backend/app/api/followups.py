@@ -4,9 +4,13 @@ from typing import List, Optional
 from pydantic import BaseModel
 from datetime import datetime
 from app.core.db import get_db
+from app.api.campaigns import verify_resume_uploaded
 
 db = get_db()
 router = APIRouter(prefix="/api", tags=["followups"])
+
+class FollowupGenerateRequest(BaseModel):
+    custom_instruction: Optional[str] = ""
 
 def get_eligible_recipients_list(campaign_oid: ObjectId) -> List[dict]:
     """
@@ -57,4 +61,112 @@ def get_eligible_followup_recipients(id: str):
         })
         
     return formatted
+
+@router.post("/campaign/{id}/generate-followups")
+def trigger_followup_generation(
+    id: str,
+    payload: FollowupGenerateRequest,
+    background_tasks: BackgroundTasks,
+    profile: dict = Depends(verify_resume_uploaded)
+):
+    """
+    Triggers concurrent follow-up email draft generation in the background.
+    """
+    from app.services.ai_generator import followup_generation_jobs, run_parallel_followup_generation
+    from app.core.config_manager import get_settings
+    
+    try:
+        campaign_oid = ObjectId(id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid campaign ID format.")
+        
+    campaign = db.campaigns.find_one({"_id": campaign_oid})
+    if not campaign:
+        raise HTTPException(status_code=404, detail="Campaign not found.")
+        
+    # Check if a job is already running
+    job = followup_generation_jobs.get(id)
+    if job and job["status"] == "running":
+        raise HTTPException(status_code=400, detail="A follow-up generation job is already running for this campaign.")
+        
+    settings = get_settings()
+    api_keys = settings.get("groq_api_keys", [])
+    if not api_keys:
+        raise HTTPException(status_code=400, detail="Groq API keys are not configured in settings.")
+        
+    eligible = get_eligible_recipients_list(campaign_oid)
+    if not eligible:
+        return {
+            "message": "No recipients eligible for follow-up generation found.",
+            "total_triggered": 0
+        }
+        
+    recipient_ids = [str(r["_id"]) for r in eligible]
+    
+    background_tasks.add_task(
+        run_parallel_followup_generation,
+        campaign_id_str=id,
+        recipient_ids=recipient_ids,
+        api_keys=api_keys,
+        profile_data=profile,
+        custom_instruction=payload.custom_instruction
+    )
+    
+    return {
+        "message": f"Follow-up generation started in background for {len(recipient_ids)} recipients.",
+        "total_triggered": len(recipient_ids)
+    }
+
+@router.get("/campaign/{id}/followup/generate-progress")
+def get_followup_generation_progress(id: str):
+    """
+    Returns the real-time progress metrics for the campaign's active follow-up generation job.
+    Falls back to querying database status if no active job is tracked in memory.
+    """
+    from app.services.ai_generator import followup_generation_jobs
+    
+    try:
+        campaign_oid = ObjectId(id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid campaign ID format.")
+        
+    job = followup_generation_jobs.get(id)
+    if job:
+        return job
+        
+    # Fallback: calculate status from database
+    recipients = list(db.recipients.find({
+        "campaign_id": campaign_oid,
+        "status": {"$in": ["sent", "ooo", "replied"]}
+    }))
+    
+    if not recipients:
+        return {
+            "status": "idle",
+            "total": 0,
+            "processed": 0,
+            "success": 0,
+            "failed": 0,
+            "errors": []
+        }
+        
+    rec_ids = [r["_id"] for r in recipients]
+    total = len(rec_ids)
+    
+    generating = db.followups.count_documents({"recipient_id": {"$in": rec_ids}, "status": "generating"})
+    success = db.followups.count_documents({"recipient_id": {"$in": rec_ids}, "status": "draft"})
+    failed = db.followups.count_documents({"recipient_id": {"$in": rec_ids}, "status": "failed"})
+    
+    processed = success + failed
+    is_running = generating > 0 and processed < total
+    
+    return {
+        "status": "running" if is_running else "completed" if processed >= total and total > 0 else "idle",
+        "total": total,
+        "processed": processed,
+        "success": success,
+        "failed": failed,
+        "errors": []
+    }
+
 
