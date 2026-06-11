@@ -89,3 +89,80 @@ def check_duplicates(payload: DuplicateCheckRequest):
         "duplicates": duplicates,
         "total_duplicates": len(duplicates)
     }
+
+class CampaignCreateRequest(BaseModel):
+    name: str
+    description: Optional[str] = ""
+    goal: str
+    recipients_raw: Optional[str] = None
+    recipients: Optional[List[RecipientItem]] = None
+
+@router.post("/campaign/new")
+def create_campaign(payload: CampaignCreateRequest, profile: dict = Depends(verify_resume_uploaded)):
+    """
+    Creates a new email outreach campaign. Parses recipients list, saves the campaign metadata,
+    and inserts recipient draft records into MongoDB.
+    """
+    from datetime import datetime
+    
+    if not payload.name.strip():
+        raise HTTPException(status_code=400, detail="Campaign name is required.")
+        
+    # 1. Parse and extract all email recipients
+    parsed_recipients = []
+    if payload.recipients_raw:
+        parsed_recipients.extend(parse_recipient_string(payload.recipients_raw))
+    if payload.recipients:
+        parsed_recipients.extend([{"email": r.email, "name": r.name} for r in payload.recipients])
+        
+    # Deduplicate recipients
+    deduped = deduplicate_recipients(parsed_recipients)
+    if not deduped:
+        raise HTTPException(status_code=400, detail="At least one valid recipient email is required to create a campaign.")
+        
+    # 2. Save campaign metadata to database
+    campaign_doc = {
+        "name": payload.name.strip(),
+        "description": payload.description.strip() if payload.description else "",
+        "goal": payload.goal.strip(),
+        "status": "draft",
+        "created_at": datetime.utcnow(),
+        "total_recipients": len(deduped),
+        "sent_count": 0,
+        "reply_count": 0,
+        "failed_count": 0,
+        "bounce_count": 0,
+        "ooo_count": 0
+    }
+    
+    result = db.campaigns.insert_one(campaign_doc)
+    campaign_id = result.inserted_id
+    
+    # 3. Save recipient drafts to database referencing this campaign
+    recipient_docs = []
+    for r in deduped:
+        recipient_docs.append({
+            "campaign_id": campaign_id,
+            "email": r["email"],
+            "name": r["name"],
+            "status": "draft",
+            "created_at": datetime.utcnow(),
+            "sent_at": None,
+            "replied_at": None,
+            "error_message": None,
+            "mail_subject": "",
+            "mail_body": "",
+            "message_id": None
+        })
+        
+    if recipient_docs:
+        db.recipients.insert_many(recipient_docs)
+        
+    # Prepare returned data (converting ObjectId to string)
+    campaign_doc["_id"] = str(campaign_id)
+    
+    return {
+        "message": "Campaign and recipient drafts created successfully.",
+        "campaign": campaign_doc,
+        "total_recipients_imported": len(deduped)
+    }
