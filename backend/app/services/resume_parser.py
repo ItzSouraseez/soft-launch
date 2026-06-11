@@ -83,7 +83,11 @@ def parse_resume_with_groq(raw_text: str) -> dict:
         
         content = response.choices[0].message.content
         parsed_json = json.loads(content)
-        return parsed_json
+        
+        # Validate keys and types with Pydantic schema to ensure all expected keys exist
+        from app.schemas.profile import ParsedResumeSchema
+        validated = ParsedResumeSchema(**parsed_json)
+        return validated.model_dump()
     except Exception as e:
         print(f"Error calling Groq API: {e}")
         raise ValueError(f"Failed to parse resume content with Groq: {str(e)}")

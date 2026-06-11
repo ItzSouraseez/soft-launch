@@ -34,3 +34,13 @@ class ProfileSchema(BaseModel):
     resume_parsed: bool = Field(default=False, description="Flag indicating if a resume has been successfully parsed")
     resume_path: str = Field(default="", description="Local path to the uploaded PDF resume")
     raw_resume_text: str = Field(default="", description="Raw text extracted from the PDF resume")
+
+class ParsedResumeSchema(BaseModel):
+    full_name: str = Field(default="", description="Candidate full name")
+    title: str = Field(default="", description="Professional title")
+    bio: str = Field(default="", description="Professional bio")
+    skills: List[str] = Field(default_factory=list, description="Technical and soft skills")
+    experience: List[ExperienceSchema] = Field(default_factory=list, description="Work experience items")
+    education: List[EducationSchema] = Field(default_factory=list, description="Education items")
+    projects: List[ProjectSchema] = Field(default_factory=list, description="Personal or professional projects")
+    social_links: SocialLinksSchema = Field(default_factory=SocialLinksSchema, description="Links to social profiles")
