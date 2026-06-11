@@ -378,9 +378,11 @@ def process_incoming_email(db, headers: dict, body: str, api_key: str):
         update_fields = {
             "status": "replied",
             "replied_at": datetime.datetime.utcnow(),
-            "reply_sentiment": classification["sentiment"] or "neutral"
+            "reply_sentiment": classification["sentiment"] or "neutral",
+            "last_incoming_body": body
         }
         campaign_inc = {"reply_count": 1}
+
         
     if update_fields:
         # Update recipient document
