@@ -7,6 +7,11 @@ from app.core.db import init_db
 async def lifespan(app: FastAPI):
     # Initialize database indexes on startup
     init_db()
+    
+    # Ensure local uploads directory exists
+    import os
+    os.makedirs("uploads", exist_ok=True)
+    
     yield
     # Any cleanup operations would go here
 
