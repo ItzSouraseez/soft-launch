@@ -327,6 +327,84 @@ def find_matching_recipient(db, headers: dict) -> dict:
         
     return None
 
+def process_incoming_email(db, headers: dict, body: str, api_key: str):
+    """
+    Integrates matching, classification, and database updates for an incoming email.
+    Saves processed message IDs in processed_incoming_emails to avoid double counting.
+    """
+    incoming_msg_id = headers.get("message_id")
+    if not incoming_msg_id:
+        # Generate dummy identifier based on From and Date if Message-ID is missing
+        sender = headers.get("from", "unknown")
+        date = headers.get("date", "unknown")
+        incoming_msg_id = f"fallback-{sender}-{date}"
+        
+    # Check for duplicate processing
+    if db.processed_incoming_emails.find_one({"message_id": incoming_msg_id}):
+        logger.info(f"Email Message-ID {incoming_msg_id} already processed. Skipping.")
+        return
+        
+    # Find recipient matching these headers
+    recipient = find_matching_recipient(db, headers)
+    if not recipient:
+        logger.info(f"No matching recipient found for incoming email from {headers.get('from')}")
+        return
+        
+    # Run classification with Groq
+    classification = classify_incoming_email(api_key, headers.get("subject", ""), body)
+    category = classification["category"]
+    
+    recipient_id = recipient["_id"]
+    campaign_id = recipient["campaign_id"]
+    
+    # Update state fields
+    update_fields = {}
+    campaign_inc = {}
+    
+    if category == "bounce":
+        update_fields = {
+            "status": "bounced",
+            "error_message": classification["bounce_reason"] or "SMTP bounce detected"
+        }
+        campaign_inc = {"bounce_count": 1}
+    elif category == "ooo":
+        update_fields = {
+            "status": "ooo",
+            "replied_at": datetime.utcnow(),
+            "ooo_return_date": classification["return_date"]
+        }
+        campaign_inc = {"ooo_count": 1}
+    elif category == "reply":
+        update_fields = {
+            "status": "replied",
+            "replied_at": datetime.utcnow(),
+            "reply_sentiment": classification["sentiment"] or "neutral"
+        }
+        campaign_inc = {"reply_count": 1}
+        
+    if update_fields:
+        # Update recipient document
+        db.recipients.update_one(
+            {"_id": recipient_id},
+            {"$set": update_fields}
+        )
+        # Update campaign counters
+        db.campaigns.update_one(
+            {"_id": campaign_id},
+            {"$inc": campaign_inc}
+        )
+        logger.info(f"Updated recipient {recipient['email']} status to {update_fields['status']} and incremented counters for campaign {campaign_id}")
+        
+    # Register this message ID as processed
+    db.processed_incoming_emails.insert_one({
+        "message_id": incoming_msg_id,
+        "recipient_id": recipient_id,
+        "campaign_id": campaign_id,
+        "processed_at": datetime.utcnow(),
+        "category": category
+    })
+
+
 
 
 
