@@ -1,11 +1,32 @@
-from fastapi import APIRouter
+import os
+from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 from typing import List, Optional
 from app.core.db import get_db
+from app.core.config_manager import get_profile
 from app.services.email_parser import parse_recipient_string, deduplicate_recipients
 
 db = get_db()
 router = APIRouter(prefix="/api", tags=["campaigns"])
+
+def verify_resume_uploaded():
+    """
+    Helper function to verify that the user has uploaded and parsed their resume.
+    Raises HTTPException if not.
+    """
+    profile = get_profile()
+    if not profile.get("resume_parsed"):
+        raise HTTPException(
+            status_code=400,
+            detail="Resume has not been parsed yet. Please upload and parse your resume first."
+        )
+    resume_path = profile.get("resume_path")
+    if not resume_path or not os.path.exists(resume_path):
+        raise HTTPException(
+            status_code=400,
+            detail="Resume PDF file is missing from disk. Please upload your resume."
+        )
+    return profile
 
 class RecipientItem(BaseModel):
     email: str
