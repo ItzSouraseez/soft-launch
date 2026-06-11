@@ -218,6 +218,55 @@ def get_reply_stats():
         }
     }
 
+@router.get("/reengagement")
+def get_reengagement_candidates(days_limit: int = 3):
+    """
+    Retrieves candidates (recipients) who received an email more than `days_limit` days ago
+    but haven't replied, bounced, or received a follow-up yet.
+    """
+    from datetime import timedelta
+    
+    time_limit = datetime.utcnow() - timedelta(days=days_limit)
+    
+    # 1. Query sent recipients sent before the time limit
+    query = {
+        "status": "sent",
+        "sent_at": {"$lt": time_limit}
+    }
+    candidates = list(db.recipients.find(query))
+    
+    if not candidates:
+        return []
+        
+    candidate_ids = [c["_id"] for c in candidates]
+    
+    # 2. Query followups collection to see who already has a follow-up (drafted or sent)
+    # Initialize followups collection if not exists
+    existing_followups = list(db.followups.find({"recipient_id": {"$in": candidate_ids}}))
+    exclude_recipient_ids = set([f["recipient_id"] for f in existing_followups])
+    
+    # 3. Filter candidates
+    reengagement_list = []
+    
+    campaign_ids = list(set([c["campaign_id"] for c in candidates]))
+    campaigns_cursor = db.campaigns.find({"_id": {"$in": campaign_ids}})
+    campaign_map = {str(camp["_id"]): camp.get("name", "Unknown Campaign") for camp in campaigns_cursor}
+    
+    for c in candidates:
+        if c["_id"] not in exclude_recipient_ids:
+            reengagement_list.append({
+                "recipient_id": str(c["_id"]),
+                "campaign_id": str(c["campaign_id"]),
+                "campaign_name": campaign_map.get(str(c["campaign_id"]), "Unknown Campaign"),
+                "email": c["email"],
+                "name": c.get("name", ""),
+                "sent_at": c["sent_at"].isoformat() if c.get("sent_at") else None,
+                "days_since_contact": (datetime.utcnow() - c["sent_at"]).days if c.get("sent_at") else 0
+            })
+            
+    return reengagement_list
+
+
 
 
 
