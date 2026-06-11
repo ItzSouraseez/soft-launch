@@ -166,3 +166,15 @@ def create_campaign(payload: CampaignCreateRequest, profile: dict = Depends(veri
         "campaign": campaign_doc,
         "total_recipients_imported": len(deduped)
     }
+
+@router.get("/campaigns")
+def list_campaigns():
+    """
+    Lists all outreach campaigns from the database, sorted by newest first.
+    """
+    campaigns = list(db.campaigns.find().sort("created_at", -1))
+    for c in campaigns:
+        c["_id"] = str(c["_id"])
+        if "created_at" in c and c["created_at"]:
+            c["created_at"] = c["created_at"].isoformat()
+    return campaigns
