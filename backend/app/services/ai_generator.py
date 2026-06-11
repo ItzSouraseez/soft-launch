@@ -229,3 +229,78 @@ def run_parallel_generation(campaign_id_str: str, recipient_ids: List[str], api_
     # Mark job as completed
     with generation_jobs_lock:
         generation_jobs[campaign_id_str]["status"] = "completed"
+
+def build_followup_prompt(
+    recipient_name: str,
+    recipient_status: str,
+    original_subject: str,
+    original_body: str,
+    incoming_email_body: str = "",
+    ooo_return_date: str = None,
+    sentiment: str = None,
+    profile: dict = None,
+    custom_instruction: str = ""
+) -> str:
+    """
+    Constructs a contextual system and user prompt instructing the LLM to draft a personalized follow-up email.
+    Adapts based on recipient status (sent -> no reply, ooo -> out of office, replied -> negative/neutral openings).
+    """
+    full_name = profile.get("full_name", "the candidate")
+    title = profile.get("title", "Software Professional")
+    bio = profile.get("bio", "")
+    skills = ", ".join(profile.get("skills", []))
+    
+    context_desc = ""
+    if recipient_status == "sent":
+        context_desc = (
+            "Context: The recipient has not replied to our initial email. This is a polite nudge follow-up.\n"
+            "Goal: Draft a short (under 80 words), friendly reminder checking in. "
+            "Re-emphasize mutual fit briefly without repeating everything from the first email. "
+            "Keep it very brief and lightweight."
+        )
+    elif recipient_status == "ooo":
+        return_date_str = f" on {ooo_return_date}" if ooo_return_date else " soon"
+        context_desc = (
+            f"Context: The recipient sent an automated Out of Office reply indicating they will return{return_date_str}.\n"
+            "Goal: Draft a follow-up email wishing them a smooth return, acknowledging their time away, and politely referencing the conversation thread."
+        )
+    elif recipient_status == "replied":
+        context_desc = (
+            f"Context: The recipient replied to our email. Their reply was: \"{incoming_email_body}\"\n"
+            f"Sentiment classified as: {sentiment or 'neutral'}\n"
+            "Goal: Draft a context-aware professional response. If they said there are no active openings, thank them, "
+            "request to stay connected for future opportunities (e.g. on LinkedIn), and briefly restate value."
+        )
+    else:
+        context_desc = (
+            "Context: Standard follow-up nudge.\n"
+            "Goal: Keep it conversational and brief, asking if they have any updates."
+        )
+        
+    if custom_instruction:
+        context_desc += f"\nCustom User Request/Instruction: {custom_instruction}\n"
+
+    prompt = (
+        "You are an AI assistant helping a software professional write a personalized follow-up email.\n"
+        f"Candidate Name: {full_name}\n"
+        f"Candidate Title: {title}\n"
+        f"Candidate Brief Bio: {bio}\n"
+        f"Candidate Top Skills: {skills}\n\n"
+        "Original Email Details:\n"
+        f"Subject: {original_subject}\n"
+        f"Body:\n{original_body}\n\n"
+        f"{context_desc}\n\n"
+        "Strict rules for follow-up emails:\n"
+        "- Do NOT use generic placeholder introductions (e.g., 'Dear [Name]'). Return only the email body and subject line.\n"
+        "- The tone must be conversational, warm, and highly professional.\n"
+        "- The email body must be under 100 words.\n"
+        "- Do NOT use cover letter clichés.\n"
+        "- Do NOT include signature placeholders (e.g., [Your Name]). The candidate's name is already configured.\n\n"
+        "You MUST respond with a JSON object strictly matching this schema:\n"
+        "{\n"
+        "  \"subject\": \"Re: [original subject]\",\n"
+        "  \"body\": \"[friendly, contextual follow-up email content]\"\n"
+        "}"
+    )
+    return prompt
+
