@@ -167,3 +167,65 @@ def generate_draft_for_recipient(db, recipient_id: str, api_key: str, profile_da
             }}
         )
         return {"recipient_id": recipient_id, "status": "failed", "error": error_msg}
+
+# In-memory tracking dictionary for active background generation jobs:
+# { campaign_id_str: { "status": "running"|"completed"|"failed", "total": int, "processed": int, ... } }
+generation_jobs = {}
+generation_jobs_lock = threading.Lock()
+
+def run_parallel_generation(campaign_id_str: str, recipient_ids: List[str], api_keys: List[str], profile_data: dict, campaign_data: dict):
+    """
+    Executes email generation for all specified recipients concurrently in a thread pool,
+    rotating through Groq API keys and tracking progress in a thread-safe dict.
+    """
+    import concurrent.futures
+    from app.core.db import get_db
+    
+    db = get_db()
+    key_cycler = ThreadSafeKeyCycler(api_keys)
+    total = len(recipient_ids)
+    
+    with generation_jobs_lock:
+        generation_jobs[campaign_id_str] = {
+            "status": "running",
+            "total": total,
+            "processed": 0,
+            "success": 0,
+            "failed": 0,
+            "blocked": 0,
+            "errors": []
+        }
+        
+    def worker(rid: str):
+        try:
+            key = key_cycler.get_next_key()
+            res = generate_draft_for_recipient(db, rid, key, profile_data, campaign_data)
+            status = res.get("status")
+            
+            with generation_jobs_lock:
+                job = generation_jobs[campaign_id_str]
+                job["processed"] += 1
+                if status == "success":
+                    job["success"] += 1
+                elif status == "blocked":
+                    job["blocked"] += 1
+                else:
+                    job["failed"] += 1
+                    if "error" in res:
+                        job["errors"].append(res["error"])
+        except Exception as e:
+            with generation_jobs_lock:
+                job = generation_jobs[campaign_id_str]
+                job["processed"] += 1
+                job["failed"] += 1
+                job["errors"].append(f"Unexpected worker error for {rid}: {str(e)}")
+                
+    # Use ThreadPoolExecutor to generate concurrently
+    max_workers = min(10, len(api_keys) * 3 if api_keys else 5)
+    with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+        # Submit all tasks
+        executor.map(worker, recipient_ids)
+        
+    # Mark job as completed
+    with generation_jobs_lock:
+        generation_jobs[campaign_id_str]["status"] = "completed"
