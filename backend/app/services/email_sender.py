@@ -558,7 +558,7 @@ def run_followup_send(campaign_id_str: str, smtp_config: dict, resume_path: str 
             references = None
             if recipient:
                 in_reply_to = recipient.get("message_id")
-                references = recipient.get("message_id")
+                references = recipient.get("references")
 
             # Build and compile message
             try:
