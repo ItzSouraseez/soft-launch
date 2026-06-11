@@ -72,3 +72,80 @@ def search_contacts(
         "results": formatted_recipients
     }
 
+@router.get("/contact/{email}")
+def get_contact_history(email: str):
+    """
+    Fetches the full historical activity of a contact by their email address.
+    Matches across all campaigns.
+    """
+    email_clean = email.strip().lower()
+    
+    recipients = list(db.recipients.find({"email": email_clean}).sort("created_at", -1))
+    
+    if not recipients:
+        raise HTTPException(status_code=404, detail="Contact not found.")
+        
+    campaign_ids = [r["campaign_id"] for r in recipients if "campaign_id" in r]
+    campaigns_cursor = db.campaigns.find({"_id": {"$in": campaign_ids}})
+    campaign_map = {str(c["_id"]): c for c in campaigns_cursor}
+    
+    history = []
+    for r in recipients:
+        c_id = str(r.get("campaign_id", ""))
+        campaign_info = campaign_map.get(c_id, {})
+        
+        events = []
+        if r.get("created_at"):
+            events.append({
+                "event": "created",
+                "timestamp": r["created_at"].isoformat(),
+                "description": "Recipient draft created in campaign."
+            })
+        if r.get("sent_at"):
+            events.append({
+                "event": "sent",
+                "timestamp": r["sent_at"].isoformat(),
+                "description": f"Email successfully dispatched (Message-ID: {r.get('message_id', 'N/A')})."
+            })
+        if r.get("replied_at"):
+            sentiment_str = f" (Sentiment: {r.get('reply_sentiment')})" if r.get("reply_sentiment") else ""
+            ooo_str = f" (Return Date: {r.get('ooo_return_date')})" if r.get("ooo_return_date") else ""
+            desc = f"Reply detected{sentiment_str}{ooo_str}."
+            events.append({
+                "event": r.get("status", "replied"),
+                "timestamp": r["replied_at"].isoformat(),
+                "description": desc
+            })
+        elif r.get("status") == "bounced":
+            events.append({
+                "event": "bounced",
+                "timestamp": r.get("sent_at", r.get("created_at")).isoformat(),
+                "description": f"Email delivery failed: {r.get('error_message', 'No details available')}"
+            })
+        elif r.get("status") == "blocked":
+            events.append({
+                "event": "blocked",
+                "timestamp": r.get("created_at").isoformat(),
+                "description": f"Dispatch blocked: {r.get('error_message', 'Domain blocked')}"
+            })
+            
+        events.sort(key=lambda x: x["timestamp"])
+            
+        history.append({
+            "recipient_id": str(r["_id"]),
+            "campaign_id": c_id,
+            "campaign_name": campaign_info.get("name", "Unknown Campaign"),
+            "campaign_goal": campaign_info.get("goal", ""),
+            "status": r.get("status", "draft"),
+            "mail_subject": r.get("mail_subject", ""),
+            "mail_body": r.get("mail_body", ""),
+            "events": events
+        })
+        
+    return {
+        "email": email_clean,
+        "name": recipients[0].get("name", ""),
+        "history": history
+    }
+
+
