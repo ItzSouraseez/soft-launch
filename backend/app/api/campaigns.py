@@ -1,4 +1,5 @@
 import os
+from bson import ObjectId
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 from typing import List, Optional
@@ -178,3 +179,38 @@ def list_campaigns():
         if "created_at" in c and c["created_at"]:
             c["created_at"] = c["created_at"].isoformat()
     return campaigns
+
+@router.get("/campaign/{id}")
+def get_campaign(id: str):
+    """
+    Fetches details of a specific campaign by ID, including its recipient records.
+    """
+    try:
+        campaign_oid = ObjectId(id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid campaign ID format.")
+        
+    campaign = db.campaigns.find_one({"_id": campaign_oid})
+    if not campaign:
+        raise HTTPException(status_code=404, detail="Campaign not found.")
+        
+    campaign["_id"] = str(campaign["_id"])
+    if "created_at" in campaign and campaign["created_at"]:
+        campaign["created_at"] = campaign["created_at"].isoformat()
+        
+    # Find all recipients for this campaign
+    recipients = list(db.recipients.find({"campaign_id": campaign_oid}))
+    for r in recipients:
+        r["_id"] = str(r["_id"])
+        r["campaign_id"] = str(r["campaign_id"])
+        if "created_at" in r and r["created_at"]:
+            r["created_at"] = r["created_at"].isoformat()
+        if "sent_at" in r and r["sent_at"]:
+            r["sent_at"] = r["sent_at"].isoformat()
+        if "replied_at" in r and r["replied_at"]:
+            r["replied_at"] = r["replied_at"].isoformat()
+            
+    return {
+        "campaign": campaign,
+        "recipients": recipients
+    }
