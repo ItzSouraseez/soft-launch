@@ -33,3 +33,26 @@ def connect_smtp(config: dict) -> smtplib.SMTP:
         server.ehlo()
         
     return server
+
+def validate_smtp_credentials(config: dict) -> tuple[bool, str]:
+    """
+    Attempts to connect and login to the SMTP server to validate the App Password credentials.
+    Returns (True, "") if successful, or (False, "error message") on failure.
+    """
+    try:
+        server = connect_smtp(config)
+        try:
+            server.login(config["email"], config["password"])
+            return True, "SMTP connection and authentication successful."
+        except smtplib.SMTPAuthenticationError:
+            return False, "Authentication failed. Please check your SMTP email and App Password."
+        except Exception as e:
+            return False, f"SMTP login failed: {str(e)}"
+        finally:
+            try:
+                server.quit()
+            except Exception:
+                pass
+    except Exception as e:
+        return False, f"Failed to connect to SMTP server: {str(e)}"
+
