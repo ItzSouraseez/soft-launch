@@ -399,7 +399,7 @@ export default function CampaignSendPage({ params }) {
         </div>
       )}
 
-      {/* Control Buttons (Step 137, 139) */}
+      {/* Control Buttons (Step 137 & 139 implemented) */}
       <div style={{ display: "flex", gap: "1rem", justifyContent: "center", marginTop: "1rem" }}>
         {job.status === "running" ? (
           <button 
