@@ -167,5 +167,57 @@ def get_contact_history(email: str):
         "other_domain_leads": list(other_leads_map.values())
     }
 
+@router.get("/dashboard/reply-stats")
+def get_reply_stats():
+    """
+    Computes aggregated CRM stats and ratios for the dashboard.
+    """
+    total_sent = db.recipients.count_documents({"status": {"$in": ["sent", "replied", "ooo", "bounced"]}})
+    total_replied = db.recipients.count_documents({"status": "replied"})
+    total_ooo = db.recipients.count_documents({"status": "ooo"})
+    total_bounced = db.recipients.count_documents({"status": "bounced"})
+    
+    reply_rate = (total_replied / total_sent * 100) if total_sent > 0 else 0.0
+    ooo_rate = (total_ooo / total_sent * 100) if total_sent > 0 else 0.0
+    bounce_rate = (total_bounced / total_sent * 100) if total_sent > 0 else 0.0
+    
+    sentiment_positive = db.recipients.count_documents({"status": "replied", "reply_sentiment": "positive"})
+    sentiment_negative = db.recipients.count_documents({"status": "replied", "reply_sentiment": "negative"})
+    
+    # Neutral/Unclassified sentiments count
+    sentiment_neutral = db.recipients.count_documents({
+        "status": "replied", 
+        "reply_sentiment": {"$in": ["neutral", None, ""]}
+    })
+    
+    total_replies_sentiment = sentiment_positive + sentiment_negative + sentiment_neutral
+    
+    return {
+        "metrics": {
+            "total_sent": total_sent,
+            "total_replied": total_replied,
+            "total_ooo": total_ooo,
+            "total_bounced": total_bounced,
+            "reply_rate": round(reply_rate, 2),
+            "ooo_rate": round(ooo_rate, 2),
+            "bounce_rate": round(bounce_rate, 2)
+        },
+        "sentiment_breakdown": {
+            "positive": {
+                "count": sentiment_positive,
+                "percentage": round((sentiment_positive / total_replies_sentiment * 100), 2) if total_replies_sentiment > 0 else 0.0
+            },
+            "negative": {
+                "count": sentiment_negative,
+                "percentage": round((sentiment_negative / total_replies_sentiment * 100), 2) if total_replies_sentiment > 0 else 0.0
+            },
+            "neutral": {
+                "count": sentiment_neutral,
+                "percentage": round((sentiment_neutral / total_replies_sentiment * 100), 2) if total_replies_sentiment > 0 else 0.0
+            }
+        }
+    }
+
+
 
 
