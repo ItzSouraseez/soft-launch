@@ -200,4 +200,66 @@ def extract_email_body(msg) -> str:
     body = re.sub(r'\n\s*\n+', '\n\n', body)
     return body.strip()
 
+def classify_incoming_email(api_key: str, subject: str, body: str) -> dict:
+    """
+    Calls Groq (llama-3.3-70b-versatile) to classify an incoming email reply.
+    Categorizes it into: bounce, ooo, reply, or other.
+    Extracts sentiment for replies, return dates for OOO, and reasons for bounces.
+    """
+    from groq import Groq
+    import json
+    
+    if not api_key:
+        logger.error("No Groq API key provided for classification.")
+        return {"category": "other", "sentiment": "neutral", "bounce_reason": None, "return_date": None}
+        
+    client = Groq(api_key=api_key)
+    
+    system_prompt = (
+        "You are an expert email analysis assistant. Analyze the incoming email subject and body "
+        "and classify it into exactly one of these categories:\n"
+        "1. 'bounce': Hard or soft bounces (e.g., mail delivery failed, mailbox full, user not found, blocked by server).\n"
+        "2. 'ooo': Out of Office, vacation, or automated replies indicating the sender is temporarily away.\n"
+        "3. 'reply': A direct, human-written reply from the recipient (interested, rejection, question, scheduling a meeting, etc.).\n"
+        "4. 'other': Spam, newsletters, automatic receipts, or other irrelevant emails.\n\n"
+        "If the category is 'ooo', try to parse the date the sender is returning to office. Format it as YYYY-MM-DD. If no return date is found, set it to null.\n"
+        "If the category is 'reply', classify the sentiment as:\n"
+        "- 'positive': The recruiter is interested, wants to schedule a call, requests a resume/portfolio, or forwards the contact.\n"
+        "- 'negative': The recruiter rejects the candidate, states there are no openings, or asks not to be contacted.\n"
+        "- 'neutral': The reply is acknowledgement without clear positive/negative intent, or requesting more general info.\n"
+        "If the category is 'bounce', identify the reason (e.g., 'invalid_email', 'mailbox_full', 'blocked', 'unknown').\n\n"
+        "You MUST respond with a valid JSON object matching this schema:\n"
+        "{\n"
+        "  \"category\": \"bounce\" | \"ooo\" | \"reply\" | \"other\",\n"
+        "  \"sentiment\": \"positive\" | \"negative\" | \"neutral\" | null,\n"
+        "  \"bounce_reason\": string | null,\n"
+        "  \"return_date\": \"YYYY-MM-DD\" | null\n"
+        "}"
+    )
+    
+    user_content = f"Subject: {subject}\n\nBody:\n{body}"
+    
+    try:
+        response = client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_content}
+            ],
+            response_format={"type": "json_object"},
+            temperature=0.0,  # Deterministic classification
+        )
+        content = response.choices[0].message.content
+        parsed = json.loads(content)
+        return {
+            "category": parsed.get("category", "other"),
+            "sentiment": parsed.get("sentiment"),
+            "bounce_reason": parsed.get("bounce_reason"),
+            "return_date": parsed.get("return_date")
+        }
+    except Exception as e:
+        logger.error(f"Error classifying email: {e}")
+        return {"category": "other", "sentiment": "neutral", "bounce_reason": None, "return_date": None}
+
+
 
