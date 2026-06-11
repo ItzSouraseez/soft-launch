@@ -97,3 +97,51 @@ async def upload_resume(file: UploadFile = File(...)):
             "parsed": False,
             "profile": profile
         }
+
+@router.post("/resume/reparse")
+async def reparse_resume():
+    """
+    Manually triggers re-parsing of the already uploaded PDF resume file.
+    """
+    file_path = os.path.join("uploads", "resume.pdf")
+    if not os.path.exists(file_path):
+        raise HTTPException(status_code=404, detail="No resume found on disk. Please upload one first.")
+        
+    # Extract text from existing file
+    try:
+        raw_text = extract_text_from_pdf(file_path)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to read resume file: {str(e)}")
+        
+    # Check if Groq API keys are configured
+    settings = get_settings()
+    has_groq_keys = bool(settings.get("groq_api_keys"))
+    if not has_groq_keys:
+        raise HTTPException(status_code=400, detail="Groq API keys are not configured in settings. Please set them up first.")
+        
+    try:
+        parsed_data = parse_resume_with_groq(raw_text)
+        
+        # Load profile and update fields
+        profile = get_profile()
+        profile.update({
+            "full_name": parsed_data.get("full_name", profile.get("full_name", "")),
+            "title": parsed_data.get("title", profile.get("title", "")),
+            "bio": parsed_data.get("bio", profile.get("bio", "")),
+            "skills": parsed_data.get("skills", profile.get("skills", [])),
+            "experience": parsed_data.get("experience", profile.get("experience", [])),
+            "education": parsed_data.get("education", profile.get("education", [])),
+            "projects": parsed_data.get("projects", profile.get("projects", [])),
+            "social_links": parsed_data.get("social_links", profile.get("social_links", {})),
+            "resume_parsed": True,
+            "resume_path": file_path,
+            "raw_resume_text": raw_text
+        })
+        save_profile(profile)
+        
+        return {
+            "message": "Resume successfully re-parsed.",
+            "profile": profile
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Groq parsing failed: {str(e)}")
