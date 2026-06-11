@@ -116,3 +116,88 @@ def fetch_email_by_id(mail: imaplib.IMAP4_SSL, msg_id: bytes) -> dict:
         "message_object": msg
     }
 
+import re
+
+def clean_html(html_str: str) -> str:
+    """
+    Removes HTML tags, style blocks, and script blocks, replacing them with plain text.
+    """
+    if not html_str:
+        return ""
+    # Remove script, style, head, title sections
+    clean_text = re.sub(r'<(script|style|head|title|meta)[^>]*>([\s\S]*?)<\/\1>', ' ', html_str, flags=re.IGNORECASE)
+    # Replace block level tags with newlines
+    clean_text = re.sub(r'<(br|p|div|tr|h1|h2|h3|h4|h5|h6|li|ol|ul)[^>]*>', '\n', clean_text, flags=re.IGNORECASE)
+    # Strip remaining HTML tags
+    clean_text = re.sub(r'<[^>]+>', ' ', clean_text)
+    # Unescape HTML entities
+    entities = {
+        "&nbsp;": " ",
+        "&amp;": "&",
+        "&lt;": "<",
+        "&gt;": ">",
+        "&quot;": '"',
+        "&apos;": "'",
+        "&#39;": "'",
+        "&ndash;": "-",
+        "&mdash;": "-"
+    }
+    for ent, char in entities.items():
+        clean_text = clean_text.replace(ent, char)
+    return clean_text
+
+def extract_email_body(msg) -> str:
+    """
+    Recursively extracts the readable text body from an email Message object.
+    Prefers text/plain. Falls back to text/html with tag cleaning if no plain text is found.
+    """
+    body = ""
+    is_html_fallback = False
+    
+    if msg.is_multipart():
+        # Loop through multipart email to find text/plain
+        for part in msg.walk():
+            content_type = part.get_content_type()
+            content_disposition = str(part.get("Content-Disposition", ""))
+            
+            if "attachment" in content_disposition:
+                continue
+                
+            if content_type == "text/plain":
+                try:
+                    charset = part.get_content_charset() or "utf-8"
+                    payload = part.get_payload(decode=True)
+                    body = payload.decode(charset, errors="replace")
+                    is_html_fallback = False
+                    break
+                except Exception:
+                    pass
+            elif content_type == "text/html" and not body:
+                try:
+                    charset = part.get_content_charset() or "utf-8"
+                    payload = part.get_payload(decode=True)
+                    body = payload.decode(charset, errors="replace")
+                    is_html_fallback = True
+                except Exception:
+                    pass
+    else:
+        content_type = msg.get_content_type()
+        try:
+            charset = msg.get_content_charset() or "utf-8"
+            payload = msg.get_payload(decode=True)
+            body = payload.decode(charset, errors="replace")
+            if content_type == "text/html":
+                is_html_fallback = True
+        except Exception:
+            pass
+
+    # Clean HTML if it was html content
+    if is_html_fallback or "<html" in body.lower() or "<div" in body.lower():
+        body = clean_html(body)
+        
+    # Standardize whitespace and remove overly long spaces
+    body = re.sub(r'[ \t]+', ' ', body)
+    body = re.sub(r'\n\s*\n+', '\n\n', body)
+    return body.strip()
+
+
