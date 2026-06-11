@@ -445,7 +445,7 @@ export default function CampaignDetailPage({ params }) {
                 backgroundColor: "rgba(255,255,255,0.01)"
               }}
             >
-              {/* Paste Reply Form Drawer (Step 145) */}
+              {/* Paste Reply Form Drawer (Step 145 implemented) */}
               <h4 style={{ fontSize: "0.95rem", fontWeight: "600", color: "var(--text-primary)", marginBottom: "0.75rem" }}>
                 Paste Recruiter Response for {rec.email}
               </h4>
