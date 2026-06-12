@@ -68,7 +68,7 @@ export default function CampaignDetailPage({ params }) {
     }
   };
 
-  // Start follow-up generation trigger (Step 154)
+  // Start follow-up generation trigger and load polling progress (Step 154 implemented)
   const handleStartFollowupGeneration = async () => {
     setIsGeneratingFollowups(true);
     try {
