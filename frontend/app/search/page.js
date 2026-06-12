@@ -110,7 +110,10 @@ export default function SearchPage() {
 
   // Trigger search on changes
   useEffect(() => {
-    fetchResults();
+    Promise.resolve().then(() => {
+      fetchResults();
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [page, campaignId, status, daysLimit]);
 
   // Handle manual submit (e.g. search input enter)
@@ -164,9 +167,9 @@ export default function SearchPage() {
               />
               <button 
                 type="submit" 
-                style={{ position: "absolute", right: "0.75rem", top: "50%", transform: "translateY(-50%)", color: "var(--text-secondary)", cursor: "pointer" }}
+                style={{ position: "absolute", right: "0.75rem", top: "50%", transform: "translateY(-50%)", color: "var(--text-secondary)", cursor: "pointer", display: "flex", alignItems: "center" }}
               >
-                🔍
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
               </button>
             </div>
           </div>

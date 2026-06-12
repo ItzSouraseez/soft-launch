@@ -114,9 +114,13 @@ export default function CampaignGeneratePage({ params }) {
           {job.status !== "failed" && job.status !== "completed" ? (
             <div className="spinner" style={{ width: "50px", height: "50px" }}></div>
           ) : job.status === "completed" ? (
-            <div style={{ fontSize: "3rem" }}>✅</div>
+            <div style={{ color: "var(--accent-secondary)", display: "flex", alignItems: "center" }}>
+              <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+            </div>
           ) : (
-            <div style={{ fontSize: "3rem" }}>❌</div>
+            <div style={{ color: "var(--accent-red)", display: "flex", alignItems: "center" }}>
+              <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </div>
           )}
         </div>
 

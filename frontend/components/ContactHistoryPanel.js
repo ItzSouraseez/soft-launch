@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { api } from "@/utils/api";
 
 export default function ContactHistoryPanel({ email, onClose, onUpdate }) {
@@ -11,29 +11,7 @@ export default function ContactHistoryPanel({ email, onClose, onUpdate }) {
   // Track open state for animations
   const [active, setActive] = useState(false);
 
-  // Trigger open state animation and fetch data when email changes
-  useEffect(() => {
-    if (email) {
-      setActive(true);
-      fetchContactHistory(email);
-    } else {
-      setActive(false);
-      setData(null);
-    }
-  }, [email]);
-
-  // Handle ESC key press to close drawer
-  useEffect(() => {
-    const handleKeyDown = (e) => {
-      if (e.key === "Escape" && email) {
-        handleClose();
-      }
-    };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [email]);
-
-  const fetchContactHistory = async (targetEmail) => {
+  const fetchContactHistory = useCallback(async (targetEmail) => {
     setLoading(true);
     setError(null);
     try {
@@ -45,15 +23,41 @@ export default function ContactHistoryPanel({ email, onClose, onUpdate }) {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
-  const handleClose = () => {
+  const handleClose = useCallback(() => {
     setActive(false);
     // Wait for slide animation to complete before raising onClose callback
     setTimeout(() => {
       onClose();
     }, 300);
-  };
+  }, [onClose]);
+
+  // Trigger open state animation and fetch data when email changes
+  useEffect(() => {
+    if (email) {
+      Promise.resolve().then(() => {
+        setActive(true);
+        fetchContactHistory(email);
+      });
+    } else {
+      Promise.resolve().then(() => {
+        setActive(false);
+        setData(null);
+      });
+    }
+  }, [email, fetchContactHistory]);
+
+  // Handle ESC key press to close drawer
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === "Escape" && email) {
+        handleClose();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [email, handleClose]);
 
   const handleStatusOverride = async (recipientId, newStatus) => {
     try {
@@ -106,7 +110,7 @@ export default function ContactHistoryPanel({ email, onClose, onUpdate }) {
             </span>
           </div>
           <button className="drawer-close" onClick={handleClose}>
-            ✕
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
           </button>
         </div>
 
@@ -143,8 +147,9 @@ export default function ContactHistoryPanel({ email, onClose, onUpdate }) {
               {/* Parallel Recruiter Targets Section */}
               {data.other_domain_leads && data.other_domain_leads.length > 0 && (
                 <div>
-                  <h4 className="drawer-section-title">
-                    🎯 Parallel Recruiter Targets ({data.other_domain_leads.length})
+                  <h4 className="drawer-section-title" style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>
+                    Parallel Recruiter Targets ({data.other_domain_leads.length})
                   </h4>
                   <p style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginBottom: "0.5rem" }}>
                     Other contacts targeted on the same company domain.
@@ -181,7 +186,10 @@ export default function ContactHistoryPanel({ email, onClose, onUpdate }) {
 
               {/* Campaign Timelines Section */}
               <div>
-                <h4 className="drawer-section-title">📬 Campaign Interactions</h4>
+                <h4 className="drawer-section-title" style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+                  Campaign Interactions
+                </h4>
                 {data.history && data.history.map((campHistory) => (
                   <div key={campHistory.recipient_id} className="history-campaign-item">
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "start", marginBottom: "0.75rem" }}>

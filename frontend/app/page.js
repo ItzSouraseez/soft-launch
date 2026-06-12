@@ -51,7 +51,9 @@ export default function DashboardPage() {
   };
 
   useEffect(() => {
-    loadAllDashboardData(true);
+    Promise.resolve().then(() => {
+      loadAllDashboardData(true);
+    });
   }, []);
 
   // Handle Manual IMAP Check Trigger
@@ -130,7 +132,10 @@ export default function DashboardPage() {
       {isCredentialsMissing && (
         <div className="error-container" style={{ margin: "0 0 1.5rem 0", padding: "1.25rem 1.5rem", textAlign: "left", display: "flex", justifyContent: "space-between", alignItems: "center", backgroundColor: "rgba(239, 68, 68, 0.12)", borderColor: "rgba(239, 68, 68, 0.35)", color: "var(--text-primary)" }}>
           <div>
-            <h4 style={{ fontWeight: "700", color: "var(--accent-red)", marginBottom: "0.25rem" }}>⚠️ Outreach Configuration Incomplete</h4>
+            <h4 style={{ fontWeight: "700", color: "var(--accent-red)", marginBottom: "0.25rem", display: "flex", alignItems: "center", gap: "0.5rem" }}>
+              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+              Outreach Configuration Incomplete
+            </h4>
             <p style={{ fontSize: "0.85rem", color: "var(--text-secondary)" }}>
               Please configure your SMTP details, IMAP app credentials, and Groq API keys to initiate outreach campaigns.
             </p>
@@ -155,7 +160,7 @@ export default function DashboardPage() {
             className="btn btn-secondary"
             disabled={syncingInbox}
           >
-            🔄 Sync Inbox
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ display: "inline-block", verticalAlign: "middle", marginRight: "0.35rem" }}><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg> Sync Inbox
           </button>
           <Link href="/campaign/new" className="btn btn-primary">
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
@@ -199,7 +204,9 @@ export default function DashboardPage() {
         <div className="card accent-primary">
           <div className="card-header">
             <span className="card-label">Active Campaigns</span>
-            <span className="card-icon">🚀</span>
+            <span className="card-icon">
+              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M4.5 16.5c-1.5 1.25-2.5 3.5-2.5 3.5s2.25-1 3.5-2.5M12 2C6.5 2 2 6.5 2 12c0 1.5.5 3 1.5 4.5L12 8l-8.5 8.5C5 17.5 6.5 18 8 18c5.5 0 10-4.5 10-10 0-1.5-.5-3-1.5-4.5L12 8z"/></svg>
+            </span>
           </div>
           <div className="card-value">{campaigns.length}</div>
           <div className="card-subtext">
@@ -210,7 +217,9 @@ export default function DashboardPage() {
         <div className="card accent-cyan">
           <div className="card-header">
             <span className="card-label">Emails Dispatched</span>
-            <span className="card-icon">✉️</span>
+            <span className="card-icon">
+              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+            </span>
           </div>
           <div className="card-value">{metrics.total_sent}</div>
           <div className="card-subtext">
@@ -224,7 +233,9 @@ export default function DashboardPage() {
         <div className="card accent-red">
           <div className="card-header">
             <span className="card-label">Bounces & Failures</span>
-            <span className="card-icon">⚠️</span>
+            <span className="card-icon">
+              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+            </span>
           </div>
           <div className="card-value">{metrics.total_bounced}</div>
           <div className="card-subtext">
@@ -237,7 +248,9 @@ export default function DashboardPage() {
         <div className="card accent-secondary">
           <div className="card-header">
             <span className="card-label">Overall Reply Rate</span>
-            <span className="card-icon">📈</span>
+            <span className="card-icon">
+              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>
+            </span>
           </div>
           <div className="card-value">{metrics.reply_rate}%</div>
           <div className="card-subtext">
@@ -320,14 +333,15 @@ export default function DashboardPage() {
           {/* 4. Inbox Monitor: Auto-Detected Responses (Steps 174 & 177) */}
           <div className="table-container">
             <div className="section-header" style={{ padding: "1.25rem 1.5rem 0.5rem 1.5rem", marginBottom: "0" }}>
-              <h3 style={{ fontSize: "1.1rem", fontWeight: "600", fontFamily: "var(--font-mono)" }}>
-                📥 Inbox Monitor: Auto-Detected Responses
+              <h3 style={{ fontSize: "1.1rem", fontWeight: "600", fontFamily: "var(--font-mono)", display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg>
+                Inbox Monitor: Auto-Detected Responses
               </h3>
             </div>
             <div className="table-wrapper" style={{ padding: "0.5rem 1.5rem 1.5rem 1.5rem" }}>
               {recentActivity.length === 0 ? (
                 <p style={{ color: "var(--text-muted)", fontSize: "0.875rem", padding: "1.5rem 0", textAlign: "center" }}>
-                  No replies or bounces detected in the inbox scan database yet. Try running "Sync Inbox".
+                  No replies or bounces detected in the inbox scan database yet. Try running &quot;Sync Inbox&quot;.
                 </p>
               ) : (
                 <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
@@ -381,8 +395,9 @@ export default function DashboardPage() {
 
           {/* 5. Custom CSS CRM Reply Ratios Progress Graph (Step 172) */}
           <div className="card">
-            <h3 style={{ fontSize: "1.1rem", fontWeight: "600", fontFamily: "var(--font-mono)", marginBottom: "1rem" }}>
-              📊 Outreach Conversion Breakdown
+            <h3 style={{ fontSize: "1.1rem", fontWeight: "600", fontFamily: "var(--font-mono)", marginBottom: "1rem", display: "flex", alignItems: "center", gap: "0.5rem" }}>
+              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+              Outreach Conversion Breakdown
             </h3>
             
             {metrics.total_sent === 0 ? (
@@ -454,8 +469,9 @@ export default function DashboardPage() {
 
           {/* 6. Check Back Reminders Panel (Step 173) */}
           <div className="card" style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
-            <h3 style={{ fontSize: "1.1rem", fontWeight: "600", fontFamily: "var(--font-mono)" }}>
-              📅 Check Back Reminders
+            <h3 style={{ fontSize: "1.1rem", fontWeight: "600", fontFamily: "var(--font-mono)", display: "flex", alignItems: "center", gap: "0.5rem" }}>
+              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+              Check Back Reminders
             </h3>
             <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem", maxHeight: "300px", overflowY: "auto" }}>
               {reminders.length === 0 ? (
@@ -486,8 +502,9 @@ export default function DashboardPage() {
 
           {/* 7. Re-engagement Stale Leads Panel (Steps 178 & 179) */}
           <div className="card" style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
-            <h3 style={{ fontSize: "1.1rem", fontWeight: "600", fontFamily: "var(--font-mono)" }}>
-              ⏳ Stale Contacts (3+ Days)
+            <h3 style={{ fontSize: "1.1rem", fontWeight: "600", fontFamily: "var(--font-mono)", display: "flex", alignItems: "center", gap: "0.5rem" }}>
+              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 2h14M5 22h14M19 2v4a7 7 0 0 1-7 7 7 7 0 0 1-7-7V2M5 22v-4a7 7 0 0 1 7-7 7 7 0 0 1 7 7v4"/></svg>
+              Stale Contacts (3+ Days)
             </h3>
             <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem", maxHeight: "300px", overflowY: "auto" }}>
               {reengagement.length === 0 ? (

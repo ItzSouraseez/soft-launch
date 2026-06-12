@@ -48,7 +48,10 @@ export default function CampaignDetailPage({ params }) {
   };
 
   useEffect(() => {
-    fetchCampaignData();
+    Promise.resolve().then(() => {
+      fetchCampaignData();
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [campaignId]);
 
   // Toggle follow-up wizard trigger (Step 151)
@@ -370,7 +373,7 @@ export default function CampaignDetailPage({ params }) {
           }}
         >
           <span style={{ fontSize: "0.875rem", color: "var(--accent-red)" }}>
-            ⚠️ <strong>Delivery Warning:</strong> We detected {bouncedCount} bounced email address(es) in this campaign. Please inspect recruiter records below to adjust.
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ display: "inline-block", verticalAlign: "middle", marginRight: "0.5rem", color: "var(--accent-red)" }}><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg> <strong>Delivery Warning:</strong> We detected {bouncedCount} bounced email address(es) in this campaign. Please inspect recruiter records below to adjust.
           </span>
         </div>
       )}
@@ -450,9 +453,9 @@ export default function CampaignDetailPage({ params }) {
                       <button
                         onClick={() => setExpandedRow(isExpanded ? null : rec._id)}
                         className="btn-icon-only"
-                        style={{ padding: "0.25rem", transform: isExpanded ? "rotate(90deg)" : "rotate(0)" }}
+                        style={{ padding: "0.25rem", transition: "transform var(--transition-fast)", transform: isExpanded ? "rotate(90deg)" : "rotate(0)" }}
                       >
-                        ▶
+                        <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
                       </button>
                     </td>
 
