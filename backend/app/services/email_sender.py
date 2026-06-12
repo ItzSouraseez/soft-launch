@@ -236,6 +236,13 @@ def run_bulk_send(campaign_id_str: str, smtp_config: dict, resume_path: str = No
 
     try:
         for idx, rec in enumerate(recipients):
+            # Check for cancel/abort trigger (Step 139)
+            with sending_jobs_lock:
+                job_ref = sending_jobs.get(campaign_id_str)
+                if job_ref and job_ref.get("status") == "aborted":
+                    logger.info(f"Campaign sending job {campaign_id_str} was aborted by candidate.")
+                    break
+
             rec_id_str = str(rec["_id"])
             rec_email = rec["email"]
             subject = rec.get("mail_subject", "")
@@ -397,13 +404,19 @@ def run_bulk_send(campaign_id_str: str, smtp_config: dict, resume_path: str = No
 
         # Mark job completed
         with sending_jobs_lock:
-            if sending_jobs[campaign_id_str]["status"] == "running":
+            final_status = sending_jobs[campaign_id_str]["status"]
+            if final_status == "running":
                 sending_jobs[campaign_id_str]["status"] = "completed"
+                final_db_status = "sent"
+            elif final_status == "aborted":
+                final_db_status = "failed"
+            else:
+                final_db_status = "sent"
 
         # Update final campaign status
         db.campaigns.update_one(
             {"_id": campaign_oid},
-            {"$set": {"status": "sent"}}
+            {"$set": {"status": final_db_status}}
         )
 
 # In-memory sending jobs tracker for followups

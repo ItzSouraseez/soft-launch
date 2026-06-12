@@ -511,4 +511,21 @@ def get_sending_progress(id: str):
         "errors": []
     }
 
+@router.post("/campaign/{id}/abort")
+def abort_campaign_send(id: str):
+    """
+    Aborts/stops the active sending job for the campaign.
+    """
+    from app.services.email_sender import sending_jobs, sending_jobs_lock
+    
+    with sending_jobs_lock:
+        job = sending_jobs.get(id)
+        if not job:
+            raise HTTPException(status_code=404, detail="No active sending job found for this campaign.")
+        if job["status"] != "running":
+            raise HTTPException(status_code=400, detail=f"Job is not active (current status: {job['status']}).")
+        job["status"] = "aborted"
+        
+    return {"message": "Email sending queue aborted."}
+
 

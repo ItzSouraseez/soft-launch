@@ -61,7 +61,9 @@ def search_contacts(
             "replied_at": r.get("replied_at").isoformat() if r.get("replied_at") else None,
             "reply_sentiment": r.get("reply_sentiment", None),
             "ooo_return_date": r.get("ooo_return_date", None),
-            "error_message": r.get("error_message", None)
+            "error_message": r.get("error_message", None),
+            "check_back_date": r.get("check_back_date", None),
+            "exclude_followup": r.get("exclude_followup", False)
         })
         
     return {
@@ -139,6 +141,8 @@ def get_contact_history(email: str):
             "status": r.get("status", "draft"),
             "mail_subject": r.get("mail_subject", ""),
             "mail_body": r.get("mail_body", ""),
+            "check_back_date": r.get("check_back_date", None),
+            "exclude_followup": r.get("exclude_followup", False),
             "events": events
         })
         
@@ -330,6 +334,10 @@ class RecipientStatusPatchRequest(BaseModel):
     reply_sentiment: Optional[str] = None
     ooo_return_date: Optional[str] = None
     error_message: Optional[str] = None
+    mail_subject: Optional[str] = None
+    mail_body: Optional[str] = None
+    check_back_date: Optional[str] = None
+    exclude_followup: Optional[bool] = None
 
 @router.patch("/recipient/{id}")
 def update_recipient_status_manually(id: str, payload: RecipientStatusPatchRequest):
@@ -371,6 +379,25 @@ def update_recipient_status_manually(id: str, payload: RecipientStatusPatchReque
             
     if payload.error_message is not None:
         update_data["error_message"] = payload.error_message.strip() if payload.error_message else None
+        
+    if payload.mail_subject is not None:
+        update_data["mail_subject"] = payload.mail_subject.strip()
+        
+    if payload.mail_body is not None:
+        update_data["mail_body"] = payload.mail_body.strip()
+        
+    if payload.check_back_date is not None:
+        check_date = payload.check_back_date.strip()
+        if check_date:
+            import re
+            if not re.match(r"^\d{4}-\d{2}-\d{2}$", check_date):
+                raise HTTPException(status_code=400, detail="Check-back date must be in YYYY-MM-DD format.")
+            update_data["check_back_date"] = check_date
+        else:
+            update_data["check_back_date"] = None
+            
+    if payload.exclude_followup is not None:
+        update_data["exclude_followup"] = payload.exclude_followup
         
     if not update_data:
         return {"message": "No fields to update.", "recipient_id": id}
