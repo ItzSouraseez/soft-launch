@@ -25,6 +25,13 @@ export default function CampaignDetailPage({ params }) {
   const [pastedOooDate, setPastedOooDate] = useState("");
   const [isSubmittingReply, setIsSubmittingReply] = useState(false);
 
+  // Follow-up Wizard states (Step 151)
+  const [isFollowupWizardOpen, setIsFollowupWizardOpen] = useState(false);
+  const [eligibleRecipients, setEligibleRecipients] = useState([]);
+  const [customInstruction, setCustomInstruction] = useState("");
+  const [isGeneratingFollowups, setIsGeneratingFollowups] = useState(false);
+  const [followupProgress, setFollowupProgress] = useState(null);
+
   // Load campaign metrics and recipients
   const fetchCampaignData = async () => {
     try {
@@ -43,6 +50,54 @@ export default function CampaignDetailPage({ params }) {
   useEffect(() => {
     fetchCampaignData();
   }, [campaignId]);
+
+  // Toggle follow-up wizard trigger (Step 151)
+  const handleToggleFollowupWizard = async () => {
+    if (isFollowupWizardOpen) {
+      setIsFollowupWizardOpen(false);
+      return;
+    }
+
+    try {
+      const data = await api.get(`/api/campaign/${campaignId}/followup/eligible`);
+      setEligibleRecipients(data || []);
+      setIsFollowupWizardOpen(true);
+    } catch (err) {
+      console.error(err);
+      alert(err.message || "Failed to load eligible follow-up recipients.");
+    }
+  };
+
+  // Start follow-up generation trigger (Step 154)
+  const handleStartFollowupGeneration = async () => {
+    setIsGeneratingFollowups(true);
+    try {
+      await api.post(`/api/campaign/${campaignId}/generate-followups`, {
+        custom_instruction: customInstruction
+      });
+      
+      const poll = setInterval(async () => {
+        try {
+          const res = await api.get(`/api/campaign/${campaignId}/followup/generate-progress`);
+          setFollowupProgress(res);
+          if (res.status === "completed") {
+            clearInterval(poll);
+            router.push(`/campaign/${campaignId}/followup/preview`);
+          } else if (res.status === "failed") {
+            clearInterval(poll);
+            alert("Follow-up draft generation failed: " + (res.errors?.join(", ") || "Rate limit or Groq API issue"));
+            setIsGeneratingFollowups(false);
+          }
+        } catch (pollErr) {
+          console.error("Follow-up progress polling error:", pollErr);
+        }
+      }, 1500);
+    } catch (err) {
+      console.error(err);
+      alert(err.message || "Failed to trigger follow-up generation.");
+      setIsGeneratingFollowups(false);
+    }
+  };
 
   // Patch recipient handler (Step 150 validated and implemented)
   const handlePatchRecipient = async (rid, patchPayload) => {
@@ -144,6 +199,13 @@ export default function CampaignDetailPage({ params }) {
           </p>
         </div>
         <div style={{ display: "flex", gap: "0.75rem" }}>
+          <button 
+            onClick={handleToggleFollowupWizard}
+            className="btn btn-secondary"
+            style={{ borderColor: "var(--accent-secondary)", color: "var(--accent-secondary)" }}
+          >
+            Create Follow-up Sequence
+          </button>
           {draftCount > 0 && (
             <button 
               onClick={() => router.push(`/campaign/${campaignId}/preview`)}
@@ -160,6 +222,109 @@ export default function CampaignDetailPage({ params }) {
           </button>
         </div>
       </div>
+
+      {/* Follow-up Wizard Section (Step 151 implemented) */}
+      {isFollowupWizardOpen && (
+        <div className="card accent-secondary" style={{ marginTop: "1.5rem", borderLeft: "4px solid var(--accent-secondary)", padding: "1.5rem" }}>
+          <h3 style={{ fontSize: "1.1rem", fontWeight: "600", marginBottom: "0.5rem" }}>Threaded Follow-up Sequence Wizard</h3>
+          
+          {isGeneratingFollowups ? (
+            <div style={{ display: "flex", flexDirection: "column", gap: "1rem", alignItems: "center", padding: "2rem 0" }}>
+              <div className="spinner" style={{ borderTopColor: "var(--accent-secondary)" }}></div>
+              <p>Formulating contextual follow-ups... {followupProgress?.processed || 0} / {followupProgress?.total || 0}</p>
+              {followupProgress && (
+                <div style={{ width: "100%", maxWidth: "400px" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "0.25rem", fontSize: "0.8rem", fontFamily: "var(--font-mono)" }}>
+                    <span>Progress</span>
+                    <span>{Math.round(((followupProgress.processed || 0) / (followupProgress.total || 1)) * 100)}%</span>
+                  </div>
+                  <div className="progress-container" style={{ height: "6px" }}>
+                    <div 
+                      className="progress-bar" 
+                      style={{ 
+                        width: `${Math.round(((followupProgress.processed || 0) / (followupProgress.total || 1)) * 100)}%`,
+                        background: "var(--accent-secondary)",
+                        transition: "width 0.4s ease"
+                      }}
+                    ></div>
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
+              <p style={{ fontSize: "0.85rem", color: "var(--text-secondary)" }}>
+                Generate personalized follow-ups for recipients who have not replied yet. 
+                Our AI analyzes past reply context (e.g. OOO date, sentiment) to formulate a threaded message.
+              </p>
+              
+              {/* Targetable Recipients List (Step 153 implemented) */}
+              <div>
+                <strong style={{ fontSize: "0.85rem", display: "block", marginBottom: "0.5rem", color: "var(--text-primary)" }}>
+                  Eligible Recruiter Targets ({eligibleRecipients.length})
+                </strong>
+                {eligibleRecipients.length === 0 ? (
+                  <div style={{ fontSize: "0.85rem", color: "var(--text-muted)", padding: "0.5rem", border: "1px dashed var(--border-light)", borderRadius: "var(--radius-sm)" }}>
+                    No leads are currently eligible for follow-ups. Recruiter contacts must have been sent an email and not replied.
+                  </div>
+                ) : (
+                  <div 
+                    style={{ 
+                      maxHeight: "120px", 
+                      overflowY: "auto", 
+                      fontSize: "0.8rem", 
+                      border: "1px solid var(--border-light)", 
+                      borderRadius: "var(--radius-sm)", 
+                      padding: "0.5rem", 
+                      backgroundColor: "rgba(0,0,0,0.1)",
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: "0.35rem"
+                    }}
+                  >
+                    {eligibleRecipients.map(r => (
+                      <div key={r.id} style={{ display: "flex", justifyContent: "space-between", fontFamily: "var(--font-mono)" }}>
+                        <span style={{ color: "var(--text-primary)" }}>{r.name || "Recruiter"} &lt;{r.email}&gt;</span>
+                        <span style={{ color: "var(--text-muted)" }}>Status: {r.status}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Contextual prompt input (Step 152 implemented) */}
+              <div className="form-group">
+                <label className="form-label" style={{ fontSize: "0.85rem" }}>Custom AI Focus / Context Instructions</label>
+                <textarea
+                  placeholder="e.g. Keep it brief, ask if they had time to review, highlight our experience in Web development..."
+                  value={customInstruction}
+                  onChange={(e) => setCustomInstruction(e.target.value)}
+                  className="textarea-field"
+                  style={{ minHeight: "80px" }}
+                  disabled={eligibleRecipients.length === 0}
+                />
+              </div>
+
+              <div style={{ display: "flex", gap: "0.75rem", justifyContent: "flex-end" }}>
+                <button 
+                  onClick={() => setIsFollowupWizardOpen(false)} 
+                  className="btn btn-secondary"
+                >
+                  Close Wizard
+                </button>
+                <button 
+                  onClick={handleStartFollowupGeneration} 
+                  disabled={eligibleRecipients.length === 0}
+                  className="btn btn-primary"
+                  style={{ backgroundColor: "var(--accent-secondary)" }}
+                >
+                  Generate Follow-up Drafts
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Statistics Cards */}
       <div className="dashboard-grid" style={{ margin: "2rem 0" }}>
