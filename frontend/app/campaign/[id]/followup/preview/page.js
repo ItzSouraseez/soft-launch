@@ -47,7 +47,7 @@ export default function FollowupPreviewPage({ params }) {
     );
   };
 
-  // Wire input fields to auto-save triggers (Step 156 implemented)
+  // Wire input fields to auto-save triggers via PUT (Step 156 implemented)
   const handleAutoSave = async (fid) => {
     const fup = followups.find(f => f.id === fid);
     if (!fup) return;
