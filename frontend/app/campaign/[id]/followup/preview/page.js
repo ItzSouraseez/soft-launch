@@ -252,7 +252,7 @@ export default function FollowupPreviewPage({ params }) {
 
       </div>
 
-      {/* Confirmation Send Outbound Modal (Step 158) */}
+      {/* Confirmation Send Outbound Modal (Step 158 implemented) */}
       <ConfirmModal 
         isOpen={isSendModalOpen}
         title="Confirm Follow-up Sequence Dispatch"
