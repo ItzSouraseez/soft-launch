@@ -453,6 +453,68 @@ def update_recipient_status_manually(id: str, payload: RecipientStatusPatchReque
         "updated_fields": list(update_data.keys())
     }
 
+@router.get("/reminders")
+def get_check_back_reminders():
+    """
+    Retrieves all recipients with a check-back date scheduled.
+    Sorted by check-back date.
+    """
+    # Fetch recipients where check_back_date exists and is not null/empty
+    query = {
+        "check_back_date": {"$ne": None, "$ne": ""}
+    }
+    reminders = list(db.recipients.find(query).sort("check_back_date", 1).limit(20))
+    
+    campaign_ids = list(set([r["campaign_id"] for r in reminders if "campaign_id" in r]))
+    campaigns_cursor = db.campaigns.find({"_id": {"$in": campaign_ids}})
+    campaign_map = {str(c["_id"]): c.get("name", "Unknown Campaign") for c in campaigns_cursor}
+    
+    formatted = []
+    for r in reminders:
+        c_id = str(r.get("campaign_id", ""))
+        formatted.append({
+            "id": str(r["_id"]),
+            "campaign_id": c_id,
+            "campaign_name": campaign_map.get(c_id, "Unknown Campaign"),
+            "email": r["email"],
+            "name": r.get("name", ""),
+            "status": r.get("status", "draft"),
+            "check_back_date": r.get("check_back_date")
+        })
+    return formatted
+
+@router.get("/recent-activity")
+def get_recent_activity():
+    """
+    Retrieves the most recent replies, bounces, and OOOs for the dashboard.
+    """
+    query = {
+        "status": {"$in": ["replied", "ooo", "bounced"]}
+    }
+    recipients = list(db.recipients.find(query).sort("replied_at", -1).limit(10))
+    
+    campaign_ids = list(set([r["campaign_id"] for r in recipients if "campaign_id" in r]))
+    campaigns_cursor = db.campaigns.find({"_id": {"$in": campaign_ids}})
+    campaign_map = {str(c["_id"]): c.get("name", "Unknown Campaign") for c in campaigns_cursor}
+    
+    formatted = []
+    for r in recipients:
+        c_id = str(r.get("campaign_id", ""))
+        formatted.append({
+            "id": str(r["_id"]),
+            "campaign_id": c_id,
+            "campaign_name": campaign_map.get(c_id, "Unknown Campaign"),
+            "email": r["email"],
+            "name": r.get("name", ""),
+            "status": r.get("status", "draft"),
+            "reply_sentiment": r.get("reply_sentiment"),
+            "ooo_return_date": r.get("ooo_return_date"),
+            "error_message": r.get("error_message"),
+            "replied_at": r.get("replied_at").isoformat() if r.get("replied_at") else None
+        })
+    return formatted
+
+
 
 
 

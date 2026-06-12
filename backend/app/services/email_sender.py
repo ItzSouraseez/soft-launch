@@ -501,6 +501,13 @@ def run_followup_send(campaign_id_str: str, smtp_config: dict, resume_path: str 
 
     try:
         for idx, fup in enumerate(followups):
+            # Check for cancel/abort trigger (Step 160)
+            with followup_sending_jobs_lock:
+                job_ref = followup_sending_jobs.get(campaign_id_str)
+                if job_ref and job_ref.get("status") == "aborted":
+                    logger.info(f"Campaign followup sending job {campaign_id_str} was aborted by candidate.")
+                    break
+
             fup_id = fup["_id"]
             rec_id = fup["recipient_id"]
             fup_email = fup["email"]
@@ -653,7 +660,8 @@ def run_followup_send(campaign_id_str: str, smtp_config: dict, resume_path: str 
 
         # Mark job completed
         with followup_sending_jobs_lock:
-            if followup_sending_jobs[campaign_id_str]["status"] == "running":
+            final_status = followup_sending_jobs[campaign_id_str]["status"]
+            if final_status == "running":
                 followup_sending_jobs[campaign_id_str]["status"] = "completed"
 
 
