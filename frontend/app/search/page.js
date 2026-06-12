@@ -268,6 +268,14 @@ export default function SearchPage() {
                       <div style={{ fontWeight: "600", color: "var(--text-primary)" }}>
                         {recipient.name || "Unnamed Recipient"}
                       </div>
+                      <div style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginTop: "0.15rem" }}>
+                        Company: {(() => {
+                          if (!recipient.email || !recipient.email.includes("@")) return "Unknown";
+                          const domain = recipient.email.split("@")[1];
+                          const name = domain.split(".")[0];
+                          return name.charAt(0).toUpperCase() + name.slice(1);
+                        })()}
+                      </div>
                     </td>
                     <td>
                       <div style={{ fontFamily: "var(--font-mono)", color: "var(--text-secondary)", fontSize: "0.875rem" }}>
