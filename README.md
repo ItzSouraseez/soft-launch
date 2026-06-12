@@ -1,6 +1,6 @@
-# OutreachAI - Personal Cold Email Outreach Platform
+# Soft Launch - Personal Cold Email Outreach Platform
 
-OutreachAI is a premium, AI-powered cold email outreach tool designed to help developers and job seekers personalise their networking campaigns. It combines a Next.js 19 frontend with a FastAPI backend and a local MongoDB instance. 
+Soft Launch is a premium, AI-powered cold email outreach tool designed to help developers and job seekers personalise their networking campaigns. It combines a Next.js 19 frontend with a FastAPI backend and a local MongoDB instance. 
 
 ---
 
@@ -71,7 +71,7 @@ npm install
 # Run Development Server
 npm run dev
 ```
-Open [http://localhost:3000](http://localhost:3000) to view the OutreachAI Dashboard.
+Open [http://localhost:3000](http://localhost:3000) to view the Soft Launch Dashboard.
 
 To run production builds:
 ```bash
