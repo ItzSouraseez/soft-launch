@@ -258,7 +258,7 @@ export default function CampaignDetailPage({ params }) {
                 Our AI analyzes past reply context (e.g. OOO date, sentiment) to formulate a threaded message.
               </p>
               
-              {/* Targetable Recipients List (Step 153 implemented) */}
+              {/* Render list of recipients targetable for follow-ups (Step 153 implemented) */}
               <div>
                 <strong style={{ fontSize: "0.85rem", display: "block", marginBottom: "0.5rem", color: "var(--text-primary)" }}>
                   Eligible Recruiter Targets ({eligibleRecipients.length})
