@@ -97,6 +97,9 @@ export default function SettingsPage() {
   };
 
   const handleDeleteDomain = async (domainStr) => {
+    const confirmUnblock = window.confirm(`Are you sure you want to unblock the domain "${domainStr}"? This will allow future outreach emails to this domain.`);
+    if (!confirmUnblock) return;
+
     setMessage({ text: "", type: "" });
     try {
       // Direct call to block delete endpoint
