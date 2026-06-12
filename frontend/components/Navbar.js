@@ -48,7 +48,7 @@ export default function Navbar() {
     <aside className="sidebar">
       <div className="sidebar-logo">
         <span className="logo-icon">⚡</span>
-        <h2 className="logo-text">Outreach<span>AI</span></h2>
+        <h2 className="logo-text">Soft<span>Launch</span></h2>
       </div>
       <nav className="sidebar-nav">
         {navItems.map((item) => {

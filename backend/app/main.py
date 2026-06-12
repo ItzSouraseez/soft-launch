@@ -30,8 +30,8 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="Cold Outreach Tool API",
-    description="Backend API for Cold Email Outreach Tool with AI-generated drafts, IMAP monitoring, and CRM features",
+    title="Soft Launch API",
+    description="Backend API for Soft Launch cold email outreach tool with AI-generated drafts, IMAP monitoring, and CRM features",
     version="1.0.0",
     lifespan=lifespan
 )
@@ -67,7 +67,7 @@ app.include_router(followups_router)
 def read_root():
     return {
         "status": "healthy",
-        "service": "Cold Outreach API",
+        "service": "Soft Launch API",
         "version": "1.0.0"
     }
 
@@ -85,6 +85,6 @@ def health_check():
     return {
         "status": "healthy" if db_status == "healthy" else "unhealthy",
         "database": db_status,
-        "service": "Cold Outreach API",
+        "service": "Soft Launch API",
         "version": "1.0.0"
     }

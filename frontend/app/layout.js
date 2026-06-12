@@ -3,7 +3,7 @@ import Navbar from "@/components/Navbar";
 import ProfileGuardian from "@/components/ProfileGuardian";
 
 export const metadata = {
-  title: "OutreachAI - Premium Cold Outreach Platform",
+  title: "Soft Launch - Premium Cold Outreach Platform",
   description: "AI-Powered personalized cold outreach campaign manager with inbox monitoring and automated context-aware followups.",
 };
 
@@ -17,7 +17,7 @@ export default function RootLayout({ children }) {
             <header className="main-header">
               <div className="header-brand">
                 <span className="logo-icon">⚡</span>
-                <h1 className="logo-text">Outreach<span>AI</span></h1>
+                <h1 className="logo-text">Soft<span>Launch</span></h1>
               </div>
               <div className="header-actions">
                 <div className="system-status">
