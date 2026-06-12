@@ -150,7 +150,7 @@ export default function FollowupSendPage({ params }) {
     return `${formatTime(minSeconds)} - ${formatTime(maxSeconds)}`;
   };
 
-  // Abort handling action trigger (Step 160 implemented)
+  // Abort handling action trigger via abort endpoint (Step 160 implemented)
   const handleAbort = async () => {
     if (!confirm("Are you sure you want to stop the follow-up sending queue? Already sent emails cannot be recalled.")) return;
     setAborting(true);
