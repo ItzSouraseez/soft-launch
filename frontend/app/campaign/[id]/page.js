@@ -292,7 +292,7 @@ export default function CampaignDetailPage({ params }) {
                 )}
               </div>
 
-              {/* Contextual prompt input (Step 152 implemented) */}
+              {/* Contextual instruction prompt input field (Step 152 implemented) */}
               <div className="form-group">
                 <label className="form-label" style={{ fontSize: "0.85rem" }}>Custom AI Focus / Context Instructions</label>
                 <textarea
